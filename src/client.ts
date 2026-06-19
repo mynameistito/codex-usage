@@ -18,17 +18,99 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_USER_AGENT = "codex-cli";
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const isOptionalObject = (
-  value: unknown
-): value is Record<string, unknown> | null | undefined =>
-  value === null || value === undefined || isObject(value);
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isOptionalArray = (
   value: unknown
 ): value is readonly unknown[] | null | undefined =>
   value === null || value === undefined || Array.isArray(value);
+
+const isOptionalBoolean = (value: unknown): boolean =>
+  value === undefined || typeof value === "boolean";
+
+const isOptionalNumber = (value: unknown): boolean =>
+  value === undefined || typeof value === "number";
+
+const isOptionalString = (value: unknown): boolean =>
+  value === undefined || typeof value === "string";
+
+const isOptionalNullableString = (value: unknown): boolean =>
+  value === null || value === undefined || typeof value === "string";
+
+const isRateLimitWindowSnapshot = (value: unknown): boolean =>
+  isObject(value) &&
+  typeof value.used_percent === "number" &&
+  typeof value.limit_window_seconds === "number" &&
+  typeof value.reset_after_seconds === "number" &&
+  typeof value.reset_at === "number";
+
+const isOptionalRateLimitWindowSnapshot = (value: unknown): boolean =>
+  value === null || value === undefined || isRateLimitWindowSnapshot(value);
+
+const isRateLimitStatusDetails = (value: unknown): boolean =>
+  isObject(value) &&
+  isOptionalBoolean(value.allowed) &&
+  isOptionalBoolean(value.limit_reached) &&
+  isOptionalRateLimitWindowSnapshot(value.primary_window) &&
+  isOptionalRateLimitWindowSnapshot(value.secondary_window);
+
+const isOptionalRateLimitStatusDetails = (value: unknown): boolean =>
+  value === null || value === undefined || isRateLimitStatusDetails(value);
+
+const isCreditStatusDetails = (value: unknown): boolean =>
+  isObject(value) &&
+  isOptionalBoolean(value.has_credits) &&
+  isOptionalBoolean(value.unlimited) &&
+  isOptionalNullableString(value.balance);
+
+const isOptionalCreditStatusDetails = (value: unknown): boolean =>
+  value === null || value === undefined || isCreditStatusDetails(value);
+
+const isSpendControlLimitDetails = (value: unknown): boolean =>
+  isObject(value) &&
+  isOptionalString(value.limit) &&
+  isOptionalString(value.used) &&
+  isOptionalString(value.remaining) &&
+  isOptionalNumber(value.used_percent) &&
+  isOptionalNumber(value.remaining_percent) &&
+  isOptionalNumber(value.reset_after_seconds) &&
+  isOptionalNumber(value.reset_at);
+
+const isOptionalSpendControlLimitDetails = (value: unknown): boolean =>
+  value === null || value === undefined || isSpendControlLimitDetails(value);
+
+const isSpendControlStatusDetails = (value: unknown): boolean =>
+  isObject(value) &&
+  isOptionalBoolean(value.reached) &&
+  isOptionalSpendControlLimitDetails(value.individual_limit);
+
+const isOptionalSpendControlStatusDetails = (value: unknown): boolean =>
+  value === null || value === undefined || isSpendControlStatusDetails(value);
+
+const isAdditionalRateLimitDetails = (value: unknown): boolean =>
+  isObject(value) &&
+  typeof value.limit_name === "string" &&
+  typeof value.metered_feature === "string" &&
+  isOptionalRateLimitStatusDetails(value.rate_limit);
+
+const isOptionalAdditionalRateLimitDetailsArray = (value: unknown): boolean =>
+  value === null ||
+  value === undefined ||
+  (Array.isArray(value) && value.every(isAdditionalRateLimitDetails));
+
+const isRateLimitReachedType = (value: unknown): boolean =>
+  isObject(value) && typeof value.type === "string";
+
+const isOptionalRateLimitReachedType = (value: unknown): boolean =>
+  value === null || value === undefined || isRateLimitReachedType(value);
+
+const isRateLimitResetCreditsSummary = (value: unknown): boolean =>
+  isObject(value) && typeof value.available_count === "number";
+
+const isOptionalRateLimitResetCreditsSummary = (value: unknown): boolean =>
+  value === null ||
+  value === undefined ||
+  isRateLimitResetCreditsSummary(value);
 
 const parseError = (message: string, value: unknown): CodexParseError =>
   new CodexParseError({ message, value });
@@ -90,12 +172,14 @@ const validateUsagePayload = (
 
     if (
       typeof value.plan_type !== "string" ||
-      !isOptionalObject(value.rate_limit) ||
-      !isOptionalObject(value.credits) ||
-      !isOptionalObject(value.spend_control) ||
-      !isOptionalArray(value.additional_rate_limits) ||
-      !isOptionalObject(value.rate_limit_reached_type) ||
-      !isOptionalObject(value.rate_limit_reset_credits)
+      !isOptionalRateLimitStatusDetails(value.rate_limit) ||
+      !isOptionalCreditStatusDetails(value.credits) ||
+      !isOptionalSpendControlStatusDetails(value.spend_control) ||
+      !isOptionalAdditionalRateLimitDetailsArray(
+        value.additional_rate_limits
+      ) ||
+      !isOptionalRateLimitReachedType(value.rate_limit_reached_type) ||
+      !isOptionalRateLimitResetCreditsSummary(value.rate_limit_reset_credits)
     ) {
       return yield* parseError("Usage response had an invalid shape", value);
     }
