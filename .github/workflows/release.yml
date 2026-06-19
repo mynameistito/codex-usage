@@ -48,15 +48,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish package
+      - name: Read package metadata
+        id: package
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
           package_name=$(node --print "require('./package.json').name")
           package_version=$(node --print "require('./package.json').version")
 
-          if npm view "$package_name@$package_version" version >/dev/null 2>&1; then
-            echo "$package_name@$package_version is already published"
+          echo "name=$package_name" >> "$GITHUB_OUTPUT"
+          echo "version=$package_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$package_version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish package
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          if npm view "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" version >/dev/null 2>&1; then
+            echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published"
             exit 0
           fi
 
           npm stage publish --access public
+
+      - name: Create GitHub release
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          if gh release view "${{ steps.package.outputs.tag }}" >/dev/null 2>&1; then
+            echo "GitHub release ${{ steps.package.outputs.tag }} already exists"
+            exit 0
+          fi
+
+          node <<'EOF' > release-notes.md
+          const changelog = await import("node:fs/promises").then((fs) =>
+            fs.readFile("CHANGELOG.md", "utf8")
+          );
+          const heading = `## ${process.env.PACKAGE_VERSION}`;
+          const start = changelog.indexOf(heading);
+          const bodyStart = start === -1 ? -1 : changelog.indexOf("\n", start) + 1;
+          const nextHeading = bodyStart === -1 ? -1 : changelog.indexOf("\n## ", bodyStart);
+          const notes = bodyStart === -1
+            ? `Release ${process.env.PACKAGE_VERSION}`
+            : changelog.slice(bodyStart, nextHeading === -1 ? undefined : nextHeading).trim();
+
+          console.log(notes || `Release ${process.env.PACKAGE_VERSION}`);
+          EOF
+
+          gh release create "${{ steps.package.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" \
+            --notes-file release-notes.md
