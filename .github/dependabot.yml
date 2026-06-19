@@ -7,7 +7,7 @@ updates:
       interval: weekly
       day: monday
     commit-message:
-      prefix: chore(deps)
+      prefix: chore(deps-ci)
     groups:
       github-actions:
         patterns:

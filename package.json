@@ -8,7 +8,6 @@
   },
   "files": [
     "dist",
-    "src",
     "README.md"
   ],
   "type": "module",
@@ -18,20 +17,16 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./native-preview": "./src/index.ts"
+    }
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --target node --outfile dist/index.js --external effect && bun build ./src/cli.ts --target node --outfile dist/cli.js --external effect && bun run build:types",
-    "build:types": "bunx tsgo -p tsconfig.build.json",
+    "build": "tsdown",
     "check": "ultracite check",
     "changeset": "changeset",
     "fix": "ultracite fix",
     "prepare": "lefthook install",
-    "publish-packages": "bun publish --access public",
     "test": "bun test __tests__",
-    "typecheck": "tsgo --noEmit",
-    "version-packages": "changeset version"
+    "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "effect": "^3.19.13"
@@ -43,6 +38,7 @@
     "lefthook": "^2.1.9",
     "oxfmt": "^0.55.0",
     "oxlint": "^1.70.0",
+    "tsdown": "^0.22.3",
     "ultracite": "7.8.3"
   },
   "packageManager": "bun@1.3.14"
