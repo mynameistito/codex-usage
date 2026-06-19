@@ -7,6 +7,7 @@ import { normalizeUsagePayload } from "@/normalize.js";
 import type {
   CodexAuthTokens,
   CodexClientOptions,
+  ConsumeResetCode,
   CodexUsagePayload,
   ConsumeResetResponse,
   NormalizedUsage,
@@ -112,6 +113,12 @@ const isOptionalRateLimitResetCreditsSummary = (value: unknown): boolean =>
   value === undefined ||
   isRateLimitResetCreditsSummary(value);
 
+const isConsumeResetCode = (value: unknown): value is ConsumeResetCode =>
+  value === "already_redeemed" ||
+  value === "no_credit" ||
+  value === "nothing_to_reset" ||
+  value === "reset";
+
 const parseError = (message: string, value: unknown): CodexParseError =>
   new CodexParseError({ message, value });
 
@@ -127,7 +134,7 @@ const validateConsumeResetResponse = (
     }
 
     const { code, windows_reset: windowsReset } = value;
-    if (typeof code !== "string" || typeof windowsReset !== "number") {
+    if (!isConsumeResetCode(code) || typeof windowsReset !== "number") {
       return yield* parseError(
         "Consume reset response had an invalid shape",
         value
