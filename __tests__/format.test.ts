@@ -1,0 +1,65 @@
+import { describe, expect, test } from "bun:test";
+
+import { formatResetCredits, formatUsage } from "@/format.js";
+import { normalizeUsagePayload } from "@/normalize.js";
+import type {
+  CodexUsagePayload,
+  RateLimitResetCreditsPayload,
+} from "@/types.js";
+
+describe("formatUsage", () => {
+  test("prints usage windows and reset credits", () => {
+    const payload: CodexUsagePayload = {
+      plan_type: "pro",
+      rate_limit: {
+        primary_window: {
+          limit_window_seconds: 18_000,
+          reset_after_seconds: 600,
+          reset_at: 1_800_000_000,
+          used_percent: 25,
+        },
+        secondary_window: {
+          limit_window_seconds: 604_800,
+          reset_after_seconds: 86_400,
+          reset_at: 1_800_086_400,
+          used_percent: 50,
+        },
+      },
+      rate_limit_reset_credits: { available_count: 3 },
+    };
+
+    const output = formatUsage(
+      normalizeUsagePayload(payload, new Date("2026-06-19T00:00:00Z"))
+    );
+
+    expect(output).toContain("Codex usage");
+    expect(output).toContain("Plan: Pro");
+    expect(output).toContain("Reset credits available: 3");
+    expect(output).toContain("5h limit");
+    expect(output).toContain("Weekly limit");
+    expect(output).toContain("75% left");
+  });
+});
+
+describe("formatResetCredits", () => {
+  test("prints reset credit details", () => {
+    const payload: RateLimitResetCreditsPayload = {
+      available_count: 1,
+      credits: [
+        {
+          expires_at: "2026-07-01T00:00:00Z",
+          granted_at: "2026-06-01T00:00:00Z",
+          id: "RateLimitResetCredit_abc123456789",
+          status: "available",
+          title: "Banked reset",
+        },
+      ],
+    };
+
+    const output = formatResetCredits(payload);
+
+    expect(output).toContain("Available: 1");
+    expect(output).toContain("Banked reset");
+    expect(output).toContain("...23456789");
+  });
+});
