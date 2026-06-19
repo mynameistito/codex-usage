@@ -75,15 +75,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
-          if gh release view "${{ steps.package.outputs.tag }}" >/dev/null 2>&1; then
-            echo "GitHub release ${{ steps.package.outputs.tag }} already exists"
-            exit 0
-          fi
+          release_date=$(date --utc +%F)
 
-          node <<'EOF' > release-notes.md
-          const changelog = await import("node:fs/promises").then((fs) =>
-            fs.readFile("CHANGELOG.md", "utf8")
-          );
+          RELEASE_DATE="$release_date" node --input-type=module <<'EOF' > release-notes.md
+          const fs = await import("node:fs/promises");
+          const changelog = await fs.readFile("CHANGELOG.md", "utf8");
           const heading = `## ${process.env.PACKAGE_VERSION}`;
           const start = changelog.indexOf(heading);
           const bodyStart = start === -1 ? -1 : changelog.indexOf("\n", start) + 1;
@@ -92,10 +88,15 @@ jobs:
             ? `Release ${process.env.PACKAGE_VERSION}`
             : changelog.slice(bodyStart, nextHeading === -1 ? undefined : nextHeading).trim();
 
-          console.log(notes || `Release ${process.env.PACKAGE_VERSION}`);
+          console.log(`Released on ${process.env.RELEASE_DATE}.\n\n${notes}`);
           EOF
+
+          if gh release view "${{ steps.package.outputs.tag }}" >/dev/null 2>&1; then
+            echo "GitHub release ${{ steps.package.outputs.tag }} already exists"
+            exit 0
+          fi
 
           gh release create "${{ steps.package.outputs.tag }}" \
             --target "$GITHUB_SHA" \
-            --title "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" \
+            --title "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} ($release_date)" \
             --notes-file release-notes.md
