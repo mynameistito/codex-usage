@@ -59,4 +59,4 @@ jobs:
             exit 0
           fi
 
-          npm publish --access public
+          npm stage publish --access public
