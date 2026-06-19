@@ -18,6 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Bun
@@ -73,29 +74,83 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
-          if gh release view "${{ steps.package.outputs.tag }}" >/dev/null 2>&1; then
-            echo "GitHub release ${{ steps.package.outputs.tag }} already exists"
-            exit 0
-          fi
+          release_date=$(date --utc +%F)
 
-          node <<'EOF' > release-notes.md
-          const changelog = await import("node:fs/promises").then((fs) =>
-            fs.readFile("CHANGELOG.md", "utf8")
-          );
-          const heading = `## ${process.env.PACKAGE_VERSION}`;
-          const start = changelog.indexOf(heading);
-          const bodyStart = start === -1 ? -1 : changelog.indexOf("\n", start) + 1;
-          const nextHeading = bodyStart === -1 ? -1 : changelog.indexOf("\n## ", bodyStart);
-          const notes = bodyStart === -1
-            ? `Release ${process.env.PACKAGE_VERSION}`
-            : changelog.slice(bodyStart, nextHeading === -1 ? undefined : nextHeading).trim();
+          RELEASE_DATE="$release_date" node --input-type=module <<'EOF' > release-manifest.tsv
+          const fs = await import("node:fs/promises");
+          const changelog = await fs.readFile("CHANGELOG.md", "utf8");
+          const packageJson = JSON.parse(await fs.readFile("package.json", "utf8"));
+          const releasesDirectory = "release-notes";
+          const headingPattern = /^##\s+([^\s]+).*$/gm;
+          const headings = [...changelog.matchAll(headingPattern)];
+          const releases = headings
+            .map((heading, index) => {
+              const version = heading[1];
 
-          console.log(notes || `Release ${process.env.PACKAGE_VERSION}`);
+              if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+                return undefined;
+              }
+
+              const bodyStart = heading.index + heading[0].length;
+              const nextHeading = headings[index + 1]?.index ?? changelog.length;
+              const notes = changelog.slice(bodyStart, nextHeading).trim();
+
+              return {
+                notes: notes || `Release ${version}`,
+                tag: `v${version}`,
+                version,
+              };
+            })
+            .filter(Boolean);
+
+          if (releases.length === 0) {
+            throw new Error("No release entries found in CHANGELOG.md");
+          }
+
+          await fs.rm(releasesDirectory, { force: true, recursive: true });
+          await fs.mkdir(releasesDirectory);
+
+          const manifest = releases.map((release, index) => {
+            const notesPath = `${releasesDirectory}/${release.tag}.md`;
+            const datedNotes = `Released on ${process.env.RELEASE_DATE}.\n\n${release.notes}`;
+
+            return fs.writeFile(notesPath, datedNotes).then(() =>
+              [
+                release.tag,
+                `${packageJson.name}@${release.version} (${process.env.RELEASE_DATE})`,
+                notesPath,
+                release.version === packageJson.version ? "true" : "false",
+                index === 0 ? "true" : "false",
+              ].join("\t")
+            );
+          });
+
+          console.log((await Promise.all(manifest)).join("\n"));
           EOF
 
-          gh release create "${{ steps.package.outputs.tag }}" \
-            --target "$GITHUB_SHA" \
-            --title "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" \
-            --notes-file release-notes.md
+          while IFS=$'\t' read -r tag title notes_file is_current is_latest; do
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "GitHub release $tag already exists"
+              continue
+            fi
+
+            if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+              gh release create "$tag" \
+                --latest="$is_latest" \
+                --notes-file "$notes_file" \
+                --title "$title"
+              continue
+            fi
+
+            if [ "$is_current" = "true" ]; then
+              gh release create "$tag" \
+                --latest="$is_latest" \
+                --notes-file "$notes_file" \
+                --target "$GITHUB_SHA" \
+                --title "$title"
+              continue
+            fi
+
+            echo "Skipping $tag because the git tag does not exist"
+          done < release-manifest.tsv
