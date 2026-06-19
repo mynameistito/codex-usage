@@ -11,7 +11,7 @@ codex-usage resets
 codex-usage reset --confirm
 ```
 
-`reset` is intentionally guarded. It will not call the reset redemption endpoint unless `--confirm` or `--yes` is provided.
+`reset` is intentionally guarded. It will not call the reset redemption endpoint unless `--confirm`, `-y`, or `--yes` is provided.
 
 ## Development
 
