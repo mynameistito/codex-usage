@@ -14,7 +14,94 @@ import type {
 } from "@/types.js";
 
 const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api";
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_USER_AGENT = "codex-cli";
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isOptionalObject = (
+  value: unknown
+): value is Record<string, unknown> | null | undefined =>
+  value === null || value === undefined || isObject(value);
+
+const isOptionalArray = (
+  value: unknown
+): value is readonly unknown[] | null | undefined =>
+  value === null || value === undefined || Array.isArray(value);
+
+const parseError = (message: string, value: unknown): CodexParseError =>
+  new CodexParseError({ message, value });
+
+const validateConsumeResetResponse = (
+  value: unknown
+): Effect.Effect<ConsumeResetResponse, CodexParseError> =>
+  Effect.gen(function* validateConsumeResetResponseEffect() {
+    if (!isObject(value)) {
+      return yield* parseError(
+        "Consume reset response was not an object",
+        value
+      );
+    }
+
+    const { code, windows_reset: windowsReset } = value;
+    if (typeof code !== "string" || typeof windowsReset !== "number") {
+      return yield* parseError(
+        "Consume reset response had an invalid shape",
+        value
+      );
+    }
+
+    return value as unknown as ConsumeResetResponse;
+  });
+
+const validateResetCreditsPayload = (
+  value: unknown
+): Effect.Effect<RateLimitResetCreditsPayload, CodexParseError> =>
+  Effect.gen(function* validateResetCreditsPayloadEffect() {
+    if (!isObject(value)) {
+      return yield* parseError(
+        "Reset credits response was not an object",
+        value
+      );
+    }
+
+    const { available_count: availableCount, credits } = value;
+    if (
+      (availableCount !== undefined && typeof availableCount !== "number") ||
+      !isOptionalArray(credits)
+    ) {
+      return yield* parseError(
+        "Reset credits response had an invalid shape",
+        value
+      );
+    }
+
+    return value as unknown as RateLimitResetCreditsPayload;
+  });
+
+const validateUsagePayload = (
+  value: unknown
+): Effect.Effect<CodexUsagePayload, CodexParseError> =>
+  Effect.gen(function* validateUsagePayloadEffect() {
+    if (!isObject(value)) {
+      return yield* parseError("Usage response was not an object", value);
+    }
+
+    if (
+      typeof value.plan_type !== "string" ||
+      !isOptionalObject(value.rate_limit) ||
+      !isOptionalObject(value.credits) ||
+      !isOptionalObject(value.spend_control) ||
+      !isOptionalArray(value.additional_rate_limits) ||
+      !isOptionalObject(value.rate_limit_reached_type) ||
+      !isOptionalObject(value.rate_limit_reset_credits)
+    ) {
+      return yield* parseError("Usage response had an invalid shape", value);
+    }
+
+    return value as unknown as CodexUsagePayload;
+  });
 
 const normalizeBaseUrl = (baseUrl = DEFAULT_BASE_URL): string => {
   let normalized = baseUrl;
@@ -61,11 +148,22 @@ const requestJson = (
       catch: (cause) =>
         new CodexHttpError({
           body: cause instanceof Error ? cause.message : String(cause),
-          message: `Request failed before receiving a response: ${url}`,
+          message:
+            cause instanceof DOMException && cause.name === "TimeoutError"
+              ? `Request timed out after ${DEFAULT_REQUEST_TIMEOUT_MS}ms: ${url}`
+              : `Request failed before receiving a response: ${url}`,
           status: 0,
-          statusText: "NETWORK_ERROR",
+          statusText:
+            cause instanceof DOMException && cause.name === "TimeoutError"
+              ? "TIMEOUT"
+              : "NETWORK_ERROR",
         }),
-      try: () => fetch(url, init),
+      try: () =>
+        fetch(url, {
+          ...init,
+          signal:
+            init.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
+        }),
     });
 
     const body = yield* Effect.tryPromise({
@@ -113,7 +211,7 @@ export const createCodexClient = (
         body: JSON.stringify({ redeem_request_id: redeemRequestId }),
         headers: jsonHeaders(tokens, userAgent),
         method: "POST",
-      }).pipe(Effect.map((value) => value as ConsumeResetResponse)),
+      }).pipe(Effect.flatMap(validateConsumeResetResponse)),
 
     fetchResetCredits: (): Effect.Effect<
       RateLimitResetCreditsPayload,
@@ -122,7 +220,7 @@ export const createCodexClient = (
       requestJson(`${baseUrl}/wham/rate-limit-reset-credits`, {
         headers: getHeaders(tokens, userAgent),
         method: "GET",
-      }).pipe(Effect.map((value) => value as RateLimitResetCreditsPayload)),
+      }).pipe(Effect.flatMap(validateResetCreditsPayload)),
 
     fetchUsage: (): Effect.Effect<
       NormalizedUsage,
@@ -132,7 +230,8 @@ export const createCodexClient = (
         headers: getHeaders(tokens, userAgent),
         method: "GET",
       }).pipe(
-        Effect.map((value) => normalizeUsagePayload(value as CodexUsagePayload))
+        Effect.flatMap(validateUsagePayload),
+        Effect.map((value) => normalizeUsagePayload(value))
       ),
   };
 };

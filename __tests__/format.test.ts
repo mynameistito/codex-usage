@@ -62,4 +62,20 @@ describe("formatResetCredits", () => {
     expect(output).toContain("Banked reset");
     expect(output).toContain("...23456789");
   });
+
+  test("prints recently expired reset credits as expired", () => {
+    const payload: RateLimitResetCreditsPayload = {
+      available_count: 0,
+      credits: [
+        {
+          expires_at: new Date(Date.now() - 60_000).toISOString(),
+          id: "RateLimitResetCredit_expired",
+          status: "expired",
+          title: "Expired reset",
+        },
+      ],
+    };
+
+    expect(formatResetCredits(payload)).toContain("expired");
+  });
 });

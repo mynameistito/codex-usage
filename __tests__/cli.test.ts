@@ -23,4 +23,8 @@ describe("parseArgs", () => {
       expect(exit.cause.toString()).toContain("without --confirm");
     }
   });
+
+  test("help takes precedence over later commands", () => {
+    expect(parseArgs(["--help", "reset", "--confirm"]).command).toBe("help");
+  });
 });

@@ -40,7 +40,7 @@
     "JavaScript": {
       "code_actions_on_format": {
         "source.fixAll.oxc": true,
-        "source.organizeImports.oxc": true
+        "source.organizeImports": true
       },
       "formatter": {
         "language_server": {
@@ -51,7 +51,7 @@
     "TSX": {
       "code_actions_on_format": {
         "source.fixAll.oxc": true,
-        "source.organizeImports.oxc": true
+        "source.organizeImports": true
       },
       "formatter": {
         "language_server": {
@@ -62,7 +62,7 @@
     "TypeScript": {
       "code_actions_on_format": {
         "source.fixAll.oxc": true,
-        "source.organizeImports.oxc": true
+        "source.organizeImports": true
       },
       "formatter": {
         "language_server": {

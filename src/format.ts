@@ -125,7 +125,12 @@ const daysUntil = (value: string | null | undefined): string => {
     return "";
   }
 
-  const days = Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+  const millisecondsUntilExpiry = date.getTime() - Date.now();
+  if (millisecondsUntilExpiry < 0) {
+    return "expired";
+  }
+
+  const days = Math.ceil(millisecondsUntilExpiry / 86_400_000);
   if (days < 0) {
     return "expired";
   }

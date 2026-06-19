@@ -70,7 +70,7 @@ export const parseArgs = (args: readonly string[]): ParsedArgs => {
 
     if (arg === "-h" || arg === "--help") {
       command = "help";
-      continue;
+      break;
     }
 
     if (arg === "--json") {
@@ -120,6 +120,14 @@ const runParsed = (
       return HELP_TEXT;
     }
 
+    if (parsed.command === "reset" && !parsed.confirm) {
+      return yield* new CliError({
+        exitCode: 2,
+        message:
+          "Refusing to redeem a reset credit without --confirm. Run `codex-usage status` first if you only want usage details.",
+      });
+    }
+
     const tokens = yield* readCodexAuth(parsed.authPath);
     const client = createCodexClient(tokens, { baseUrl: parsed.baseUrl });
 
@@ -131,14 +139,6 @@ const runParsed = (
     if (parsed.command === "resets") {
       const credits = yield* client.fetchResetCredits();
       return parsed.json ? stringifyJson(credits) : formatResetCredits(credits);
-    }
-
-    if (!parsed.confirm) {
-      return yield* new CliError({
-        exitCode: 2,
-        message:
-          "Refusing to redeem a reset credit without --confirm. Run `codex-usage status` first if you only want usage details.",
-      });
     }
 
     const response = yield* client.consumeResetCredit();
