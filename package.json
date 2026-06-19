@@ -4,7 +4,7 @@
   "private": false,
   "description": "CLI for inspecting Codex usage windows and reset credits.",
   "bin": {
-    "codex-usage": "./dist/cli.js"
+    "codex-usage": "dist/cli.js"
   },
   "files": [
     "dist",
