@@ -4,7 +4,7 @@ const shared = {
   deps: {
     neverBundle: ["effect"],
   },
-  dts: true,
+	dts: true,
   format: ["esm"],
   outDir: "dist",
   outExtensions: () => ({ dts: ".d.ts", js: ".js" }),
