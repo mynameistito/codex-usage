@@ -26,7 +26,7 @@
     "fix": "ultracite fix",
     "knip": "knip",
     "prepare": "lefthook install",
-    "test": "bun test __tests__",
+    "test": "bun test",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
