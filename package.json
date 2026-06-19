@@ -24,6 +24,7 @@
     "check": "ultracite check",
     "changeset": "changeset",
     "fix": "ultracite fix",
+    "knip": "bunx knip@latest",
     "prepare": "lefthook install",
     "test": "bun test __tests__",
     "typecheck": "tsgo --noEmit"
