@@ -60,17 +60,39 @@ jobs:
           echo "tag=v$package_version" >> "$GITHUB_OUTPUT"
 
       - name: Publish package
+        id: publish
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
-          if npm view "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" version >/dev/null 2>&1; then
-            echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published"
+          package_spec="${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}"
+
+          if npm view "$package_spec" version >/dev/null 2>&1; then
+            echo "$package_spec is already published"
+            echo "published=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          npm stage publish --access public
+          staged_json=$(npm stage list "$package_spec" --json 2>/dev/null || true)
+          if STAGED_JSON="$staged_json" node --input-type=module <<'EOF'
+          const input = process.env.STAGED_JSON?.trim();
+          if (!input) {
+            process.exit(1);
+          }
+
+          const parsed = JSON.parse(input);
+          const staged = Array.isArray(parsed) ? parsed : Object.values(parsed ?? {});
+          process.exit(staged.length > 0 ? 0 : 1);
+          EOF
+          then
+            echo "$package_spec is already staged for approval"
+            echo "staged=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          npm stage publish . --access public --provenance
+          echo "staged=true" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
-        if: steps.changesets.outputs.hasChangesets == 'false'
+        if: steps.changesets.outputs.hasChangesets == 'false' && steps.publish.outputs.published == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
