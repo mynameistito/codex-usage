@@ -22,20 +22,3 @@ bun test
 bun run build
 bun run check
 ```
-
-## Native TypeScript Preview
-
-The package exposes the TypeScript source for runtimes that support native TypeScript loading:
-
-```ts
-import { normalizeUsagePayload } from "@mynameistito/codex-usage/native-preview";
-```
-
-The published CLI still uses `dist/cli.js` for normal Node/npm compatibility.
-
-## Release Flow
-
-```sh
-bun run changeset
-bun run version-packages
-```
