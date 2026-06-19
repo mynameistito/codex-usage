@@ -90,6 +90,40 @@ describe("createCodexClient", () => {
     }
   });
 
+  test("rejects non-object reset credit entries", async () => {
+    mockResponse({ credits: [null] });
+
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, {
+        baseUrl: "https://example.com",
+      }).fetchResetCredits()
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Reset credits response had an invalid shape"
+      );
+    }
+  });
+
+  test("rejects reset credit entries with invalid field types", async () => {
+    mockResponse({ credits: [{ expires_at: 123 }] });
+
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, {
+        baseUrl: "https://example.com",
+      }).fetchResetCredits()
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Reset credits response had an invalid shape"
+      );
+    }
+  });
+
   test("rejects consume reset responses that are arrays", async () => {
     mockResponse([]);
 

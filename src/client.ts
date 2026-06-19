@@ -21,11 +21,6 @@ const DEFAULT_USER_AGENT = "codex-cli";
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isOptionalArray = (
-  value: unknown
-): value is readonly unknown[] | null | undefined =>
-  value === null || value === undefined || Array.isArray(value);
-
 const isOptionalBoolean = (value: unknown): boolean =>
   value === undefined || typeof value === "boolean";
 
@@ -119,6 +114,22 @@ const isConsumeResetCode = (value: unknown): value is ConsumeResetCode =>
   value === "nothing_to_reset" ||
   value === "reset";
 
+const isRateLimitResetCredit = (value: unknown): boolean =>
+  isObject(value) &&
+  isOptionalString(value.id) &&
+  isOptionalString(value.title) &&
+  isOptionalString(value.status) &&
+  isOptionalString(value.profile_user_id) &&
+  isOptionalString(value.granted_at) &&
+  isOptionalString(value.expires_at) &&
+  isOptionalNullableString(value.redeemed_at) &&
+  isOptionalString(value.description);
+
+const isOptionalRateLimitResetCreditArray = (value: unknown): boolean =>
+  value === null ||
+  value === undefined ||
+  (Array.isArray(value) && value.every(isRateLimitResetCredit));
+
 const parseError = (message: string, value: unknown): CodexParseError =>
   new CodexParseError({ message, value });
 
@@ -158,7 +169,7 @@ const validateResetCreditsPayload = (
     const { available_count: availableCount, credits } = value;
     if (
       (availableCount !== undefined && typeof availableCount !== "number") ||
-      !isOptionalArray(credits)
+      !isOptionalRateLimitResetCreditArray(credits)
     ) {
       return yield* parseError(
         "Reset credits response had an invalid shape",
