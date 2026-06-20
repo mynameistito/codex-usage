@@ -117,7 +117,7 @@ jobs:
           echo "staged=true" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
-        if: steps.changesets.outputs.hasChangesets == 'false' && steps.publish.outputs.published == 'true'
+        if: steps.changesets.outputs.hasChangesets == 'false' && (steps.publish.outputs.published == 'true' || steps.publish.outputs.staged == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
