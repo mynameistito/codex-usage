@@ -18,6 +18,8 @@ const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_USER_AGENT = "codex-cli";
 
+const CHATGPT_HOSTNAMES = new Set(["chat.openai.com", "chatgpt.com"]);
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -205,16 +207,41 @@ const validateUsagePayload = (
     return value as unknown as CodexUsagePayload;
   });
 
+const isLoopbackHostname = (hostname: string): boolean =>
+  hostname === "localhost" ||
+  hostname.endsWith(".localhost") ||
+  hostname === "127.0.0.1" ||
+  hostname === "[::1]" ||
+  hostname === "::1";
+
 const normalizeBaseUrl = (baseUrl = DEFAULT_BASE_URL): string => {
-  let normalized = baseUrl;
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch (error) {
+    throw new TypeError(`Invalid base URL: ${baseUrl}`, { cause: error });
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new TypeError("Base URL must not include credentials");
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new TypeError("Base URL must not include a query string or fragment");
+  }
+
+  if (parsed.protocol !== "https:" && !isLoopbackHostname(parsed.hostname)) {
+    throw new TypeError("Base URL must use HTTPS unless it is localhost");
+  }
+
+  let normalized = parsed.toString();
   while (normalized.endsWith("/")) {
     normalized = normalized.slice(0, -1);
   }
 
   if (
-    (normalized.startsWith("https://chatgpt.com") ||
-      normalized.startsWith("https://chat.openai.com")) &&
-    !normalized.includes("/backend-api")
+    CHATGPT_HOSTNAMES.has(parsed.hostname) &&
+    !parsed.pathname.startsWith("/backend-api")
   ) {
     return `${normalized}/backend-api`;
   }

@@ -177,4 +177,27 @@ describe("parseArgs", () => {
       redeem_request_id: expect.any(String),
     });
   });
+
+  test("rejects insecure remote base URLs before fetching", async () => {
+    const authPath = await createAuthFile();
+    const calls = mockFetch({ plan_type: "pro" });
+
+    const exit = await Effect.runPromiseExit(
+      runCli([
+        "status",
+        "--auth",
+        authPath,
+        "--base-url",
+        "http://example.test",
+      ])
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(calls).toHaveLength(0);
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must use HTTPS unless it is localhost"
+      );
+    }
+  });
 });
