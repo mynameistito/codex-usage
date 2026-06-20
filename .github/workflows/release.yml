@@ -63,7 +63,9 @@ jobs:
         id: publish
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
-          package_spec="${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}"
+          package_name="${{ steps.package.outputs.name }}"
+          package_version="${{ steps.package.outputs.version }}"
+          package_spec="$package_name@$package_version"
 
           if npm view "$package_spec" version >/dev/null 2>&1; then
             echo "$package_spec is already published"
@@ -71,16 +73,39 @@ jobs:
             exit 0
           fi
 
-          staged_json=$(npm stage list "$package_spec" --json 2>/dev/null || true)
-          if STAGED_JSON="$staged_json" node --input-type=module <<'EOF'
+          staged_json=$(npm stage list "$package_name" --json 2>/dev/null || true)
+          if STAGED_JSON="$staged_json" PACKAGE_VERSION="$package_version" node --input-type=module <<'EOF'
           const input = process.env.STAGED_JSON?.trim();
           if (!input) {
             process.exit(1);
           }
 
-          const parsed = JSON.parse(input);
+          let parsed;
+          try {
+            parsed = JSON.parse(input);
+          } catch {
+            process.exit(1);
+          }
+
+          if (parsed?.error) {
+            process.exit(1);
+          }
+
+          const version = process.env.PACKAGE_VERSION;
           const staged = Array.isArray(parsed) ? parsed : Object.values(parsed ?? {});
-          process.exit(staged.length > 0 ? 0 : 1);
+          const hasVersion = staged.some((entry) => {
+            if (typeof entry === "string") {
+              return entry === version || entry.endsWith(`@${version}`);
+            }
+
+            if (!entry || typeof entry !== "object") {
+              return false;
+            }
+
+            return entry.version === version || entry.package?.version === version;
+          });
+
+          process.exit(hasVersion ? 0 : 1);
           EOF
           then
             echo "$package_spec is already staged for approval"
