@@ -48,6 +48,18 @@ describe("createCodexClient", () => {
     ).toThrow("Base URL must not include credentials");
   });
 
+  test("rejects base URLs that include query strings", () => {
+    expect(() =>
+      createCodexClient(tokens, { baseUrl: "https://example.com?query=value" })
+    ).toThrow("Base URL must not include a query string or fragment");
+  });
+
+  test("rejects base URLs that include fragments", () => {
+    expect(() =>
+      createCodexClient(tokens, { baseUrl: "https://example.com#fragment" })
+    ).toThrow("Base URL must not include a query string or fragment");
+  });
+
   test("only appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
     globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
