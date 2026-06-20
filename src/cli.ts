@@ -112,6 +112,9 @@ export const parseArgs = (args: readonly string[]): ParsedArgs => {
 const stringifyJson = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
+const safeErrorMessage = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
 const runParsed = (
   parsed: ParsedArgs
 ): Effect.Effect<string, CodexUsageError> =>
@@ -129,7 +132,14 @@ const runParsed = (
     }
 
     const tokens = yield* readCodexAuth(parsed.authPath);
-    const client = createCodexClient(tokens, { baseUrl: parsed.baseUrl });
+    const client = yield* Effect.try({
+      catch: (cause) =>
+        new CliError({
+          exitCode: 2,
+          message: safeErrorMessage(cause),
+        }),
+      try: () => createCodexClient(tokens, { baseUrl: parsed.baseUrl }),
+    });
 
     if (parsed.command === "status") {
       const usage = yield* client.fetchUsage();
@@ -161,9 +171,6 @@ export const runCli = (
 const printError = (error: CodexUsageError): number => {
   if (error._tag === "CodexHttpError") {
     console.error(`${error.message}: HTTP ${error.status} ${error.statusText}`);
-    if (error.body) {
-      console.error(error.body);
-    }
     return 1;
   }
 

@@ -36,6 +36,60 @@ describe("createCodexClient", () => {
     }
   });
 
+  test("rejects insecure remote base URLs", () => {
+    expect(() =>
+      createCodexClient(tokens, { baseUrl: "http://example.com" })
+    ).toThrow("Base URL must use HTTPS unless it is localhost");
+  });
+
+  test("rejects base URLs that include credentials", () => {
+    expect(() =>
+      createCodexClient(tokens, { baseUrl: "https://user:pass@example.com" })
+    ).toThrow("Base URL must not include credentials");
+  });
+
+  test("rejects base URLs that include query strings", () => {
+    expect(() =>
+      createCodexClient(tokens, { baseUrl: "https://example.com?query=value" })
+    ).toThrow("Base URL must not include a query string or fragment");
+  });
+
+  test("rejects base URLs that include fragments", () => {
+    expect(() =>
+      createCodexClient(tokens, { baseUrl: "https://example.com#fragment" })
+    ).toThrow("Base URL must not include a query string or fragment");
+  });
+
+  test("only appends backend-api for exact ChatGPT hostnames", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
+      calls.push(String(input));
+      return Promise.resolve(Response.json({ plan_type: "pro" }));
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      createCodexClient(tokens, {
+        baseUrl: "https://chatgpt.com.evil.test",
+      }).fetchUsage()
+    );
+
+    expect(calls).toEqual(["https://chatgpt.com.evil.test/wham/usage"]);
+  });
+
+  test("appends backend-api for exact ChatGPT hostnames", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
+      calls.push(String(input));
+      return Promise.resolve(Response.json({ plan_type: "pro" }));
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      createCodexClient(tokens, { baseUrl: "https://chatgpt.com" }).fetchUsage()
+    );
+
+    expect(calls).toEqual(["https://chatgpt.com/backend-api/wham/usage"]);
+  });
+
   test("rejects malformed nested rate limit windows", async () => {
     mockResponse({
       plan_type: "pro",
