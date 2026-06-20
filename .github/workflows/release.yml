@@ -122,9 +122,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
-          release_date=$(date --utc +%F)
-
-          RELEASE_DATE="$release_date" node --input-type=module <<'EOF' > release-notes.md
+          node --input-type=module <<'EOF' > release-notes.md
           const fs = await import("node:fs/promises");
           const changelog = await fs.readFile("CHANGELOG.md", "utf8");
           const heading = `## ${process.env.PACKAGE_VERSION}`;
@@ -135,7 +133,7 @@ jobs:
             ? `Release ${process.env.PACKAGE_VERSION}`
             : changelog.slice(bodyStart, nextHeading === -1 ? undefined : nextHeading).trim();
 
-          console.log(`Released on ${process.env.RELEASE_DATE}.\n\n${notes}`);
+          console.log(notes);
           EOF
 
           if gh release view "${{ steps.package.outputs.tag }}" >/dev/null 2>&1; then
@@ -145,5 +143,5 @@ jobs:
 
           gh release create "${{ steps.package.outputs.tag }}" \
             --target "$GITHUB_SHA" \
-            --title "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} ($release_date)" \
+            --title "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" \
             --notes-file release-notes.md
