@@ -1,5 +1,11 @@
 # @mynameistito/codex-usage
 
+## 1.0.2
+
+### Patch Changes
+
+- ff7538a: Harden custom base URL validation and avoid printing raw HTTP error bodies.
+
 ## 1.0.1
 
 ### Patch Changes
