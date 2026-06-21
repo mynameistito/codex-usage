@@ -27,6 +27,7 @@
     "build": "tsdown",
     "check": "ultracite check",
     "changeset": "changeset",
+    "changeset-add": "bun run ./scripts/add-changeset.ts",
     "fix": "ultracite fix",
     "knip": "knip",
     "prepare": "lefthook install",
