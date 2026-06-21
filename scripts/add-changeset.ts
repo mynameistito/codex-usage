@@ -3,11 +3,11 @@
  * Non-interactive changeset creator for AI agents
  *
  * Usage:
- *   bun run /scripts/add-changeset.ts <type> <summary>
+ *   bun run ./scripts/add-changeset.ts <type> <summary>
  *
  * Example:
- *   bun run /scripts/add-changeset.ts patch "Fix clipboard timing"
- *   bun run /scripts/add-changeset.ts minor "Add new feature"
+ *   bun run ./scripts/add-changeset.ts patch "Fix clipboard timing"
+ *   bun run ./scripts/add-changeset.ts minor "Add new feature"
  */
 
 import { randomBytes } from "node:crypto";
