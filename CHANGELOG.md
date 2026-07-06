@@ -1,5 +1,11 @@
 # @mynameistito/codex-usage
 
+## 1.0.3
+
+### Patch Changes
+
+- bc421fd: # Redeem the soonest-expiring available reset credit from the CLI
+
 ## 1.0.2
 
 ### Patch Changes
