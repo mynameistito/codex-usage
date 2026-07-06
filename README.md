@@ -11,8 +11,7 @@ codex-usage resets
 codex-usage reset --confirm
 ```
 
-`reset` is intentionally guarded. It will not call the reset redemption endpoint unless `--confirm`, `-y`, or `--yes` is provided.
-Calling applications should require the same kind of explicit user confirmation before using programmatic reset redemption.
+`reset` is intentionally guarded. It will not call the reset redemption endpoint unless `--confirm`, `-y`, or `--yes` is provided. Calling applications should require the same kind of explicit user confirmation before using programmatic reset redemption.
 
 ## Library usage
 
