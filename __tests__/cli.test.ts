@@ -235,6 +235,37 @@ describe("parseArgs", () => {
     }
   });
 
+  test("refuses confirmed reset when available credits have invalid expiry dates", async () => {
+    const authPath = await createAuthFile();
+    const calls = mockFetch({
+      available_count: 1,
+      credits: [
+        {
+          expires_at: "not a date",
+          id: "RateLimitResetCredit_invalid_expiry",
+          status: "available",
+        },
+      ],
+    });
+
+    const exit = await Effect.runPromiseExit(
+      runCli([
+        "reset",
+        "--confirm",
+        "--auth",
+        authPath,
+        "--base-url",
+        testBaseUrl,
+      ])
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(calls).toHaveLength(1);
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain("No available reset credits");
+    }
+  });
+
   test("rejects insecure remote base URLs before fetching", async () => {
     const authPath = await createAuthFile();
     const calls = mockFetch({ plan_type: "pro" });

@@ -116,13 +116,15 @@ const stringifyJson = (value: unknown): string =>
 const safeErrorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-const timestampForCreditExpiry = (credit: RateLimitResetCredit): number => {
+const timestampForCreditExpiry = (
+  credit: RateLimitResetCredit
+): number | null => {
   if (!credit.expires_at) {
     return Number.POSITIVE_INFINITY;
   }
 
   const timestamp = Date.parse(credit.expires_at);
-  return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
+  return Number.isNaN(timestamp) ? null : timestamp;
 };
 
 const pickSoonestExpiringCredit = (
@@ -135,14 +137,22 @@ const pickSoonestExpiringCredit = (
     }
 
     const expiresAt = timestampForCreditExpiry(credit);
-    return expiresAt === Number.POSITIVE_INFINITY || expiresAt > now;
+    return (
+      expiresAt !== null &&
+      (expiresAt === Number.POSITIVE_INFINITY || expiresAt > now)
+    );
   });
 
   return (
-    availableCredits.toSorted(
-      (left, right) =>
-        timestampForCreditExpiry(left) - timestampForCreditExpiry(right)
-    )[0] ?? null
+    availableCredits.toSorted((left, right) => {
+      const leftExpiresAt = timestampForCreditExpiry(left);
+      const rightExpiresAt = timestampForCreditExpiry(right);
+
+      return (
+        (leftExpiresAt ?? Number.POSITIVE_INFINITY) -
+        (rightExpiresAt ?? Number.POSITIVE_INFINITY)
+      );
+    })[0] ?? null
   );
 };
 
