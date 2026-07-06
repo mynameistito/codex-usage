@@ -12,6 +12,7 @@ import {
   formatResetCredits,
   formatUsage,
 } from "@/format.js";
+import type { RateLimitResetCredit } from "@/types.js";
 
 interface ParsedArgs {
   readonly command: "help" | "reset" | "resets" | "status";
@@ -115,6 +116,46 @@ const stringifyJson = (value: unknown): string =>
 const safeErrorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
+const timestampForCreditExpiry = (
+  credit: RateLimitResetCredit
+): number | null => {
+  if (!credit.expires_at) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const timestamp = Date.parse(credit.expires_at);
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const pickSoonestExpiringCredit = (
+  credits: readonly RateLimitResetCredit[],
+  now = Date.now()
+): RateLimitResetCredit | null => {
+  const availableCredits = credits.filter((credit) => {
+    if (!credit.id || (credit.status ?? "available") !== "available") {
+      return false;
+    }
+
+    const expiresAt = timestampForCreditExpiry(credit);
+    return (
+      expiresAt !== null &&
+      (expiresAt === Number.POSITIVE_INFINITY || expiresAt > now)
+    );
+  });
+
+  return (
+    availableCredits.toSorted((left, right) => {
+      const leftExpiresAt = timestampForCreditExpiry(left);
+      const rightExpiresAt = timestampForCreditExpiry(right);
+
+      return (
+        (leftExpiresAt ?? Number.POSITIVE_INFINITY) -
+        (rightExpiresAt ?? Number.POSITIVE_INFINITY)
+      );
+    })[0] ?? null
+  );
+};
+
 const runParsed = (
   parsed: ParsedArgs
 ): Effect.Effect<string, CodexUsageError> =>
@@ -151,7 +192,16 @@ const runParsed = (
       return parsed.json ? stringifyJson(credits) : formatResetCredits(credits);
     }
 
-    const response = yield* client.consumeResetCredit();
+    const credits = yield* client.fetchResetCredits();
+    const credit = pickSoonestExpiringCredit(credits.credits ?? []);
+    if (!credit?.id) {
+      return yield* new CliError({
+        exitCode: 1,
+        message: "No available reset credits to redeem.",
+      });
+    }
+
+    const response = yield* client.consumeResetCredit(undefined, credit.id);
     return parsed.json
       ? stringifyJson(response)
       : formatConsumeResetResponse(response);

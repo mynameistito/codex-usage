@@ -36,8 +36,9 @@ const createAuthFile = async (): Promise<string> => {
   return authPath;
 };
 
-const mockFetch = (body: unknown): FetchCall[] => {
+const mockFetch = (body: unknown | readonly unknown[]): FetchCall[] => {
   const calls: FetchCall[] = [];
+  const bodies = Array.isArray(body) ? [...body] : [body];
   globalThis.fetch = ((
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1]
@@ -50,7 +51,7 @@ const mockFetch = (body: unknown): FetchCall[] => {
       url: request?.url ?? String(input),
     });
 
-    return Promise.resolve(Response.json(body));
+    return Promise.resolve(Response.json(bodies.shift() ?? body));
   }) as typeof fetch;
 
   return calls;
@@ -150,9 +151,31 @@ describe("parseArgs", () => {
     expect(calls[0]?.url).toBe(`${testBaseUrl}/wham/rate-limit-reset-credits`);
   });
 
-  test("dispatches confirmed reset json with mocked fetch only", async () => {
+  test("dispatches confirmed reset json with the soonest-expiring credit", async () => {
     const authPath = await createAuthFile();
-    const calls = mockFetch({ code: "reset", windows_reset: 1 });
+    const calls = mockFetch([
+      {
+        available_count: 3,
+        credits: [
+          {
+            expires_at: "2026-08-01T00:00:00Z",
+            id: "RateLimitResetCredit_later",
+            status: "available",
+          },
+          {
+            expires_at: "2026-07-01T00:00:00Z",
+            id: "RateLimitResetCredit_expired",
+            status: "available",
+          },
+          {
+            expires_at: "2026-07-10T00:00:00Z",
+            id: "RateLimitResetCredit_soonest",
+            status: "available",
+          },
+        ],
+      },
+      { code: "reset", windows_reset: 1 },
+    ]);
 
     const output = await Effect.runPromise(
       runCli([
@@ -168,14 +191,79 @@ describe("parseArgs", () => {
     const parsed = JSON.parse(output) as { readonly code?: string };
 
     expect(parsed.code).toBe("reset");
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.method).toBe("POST");
-    expect(calls[0]?.url).toBe(
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.method).toBe("GET");
+    expect(calls[0]?.url).toBe(`${testBaseUrl}/wham/rate-limit-reset-credits`);
+    expect(calls[1]?.method).toBe("POST");
+    expect(calls[1]?.url).toBe(
       `${testBaseUrl}/wham/rate-limit-reset-credits/consume`
     );
-    expect(JSON.parse(String(calls[0]?.body))).toEqual({
+    expect(JSON.parse(String(calls[1]?.body))).toEqual({
+      credit_id: "RateLimitResetCredit_soonest",
       redeem_request_id: expect.any(String),
     });
+  });
+
+  test("refuses confirmed reset when no credits are available", async () => {
+    const authPath = await createAuthFile();
+    const calls = mockFetch({
+      available_count: 0,
+      credits: [
+        {
+          expires_at: "2026-08-01T00:00:00Z",
+          id: "RateLimitResetCredit_redeemed",
+          status: "redeemed",
+        },
+      ],
+    });
+
+    const exit = await Effect.runPromiseExit(
+      runCli([
+        "reset",
+        "--confirm",
+        "--auth",
+        authPath,
+        "--base-url",
+        testBaseUrl,
+      ])
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(calls).toHaveLength(1);
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain("No available reset credits");
+    }
+  });
+
+  test("refuses confirmed reset when available credits have invalid expiry dates", async () => {
+    const authPath = await createAuthFile();
+    const calls = mockFetch({
+      available_count: 1,
+      credits: [
+        {
+          expires_at: "not a date",
+          id: "RateLimitResetCredit_invalid_expiry",
+          status: "available",
+        },
+      ],
+    });
+
+    const exit = await Effect.runPromiseExit(
+      runCli([
+        "reset",
+        "--confirm",
+        "--auth",
+        authPath,
+        "--base-url",
+        testBaseUrl,
+      ])
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(calls).toHaveLength(1);
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain("No available reset credits");
+    }
   });
 
   test("rejects insecure remote base URLs before fetching", async () => {

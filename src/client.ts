@@ -334,10 +334,14 @@ export const createCodexClient = (
 
   return {
     consumeResetCredit: (
-      redeemRequestId = randomUUID()
+      redeemRequestId = randomUUID(),
+      creditId?: string
     ): Effect.Effect<ConsumeResetResponse, CodexHttpError | CodexParseError> =>
       requestJson(`${baseUrl}/wham/rate-limit-reset-credits/consume`, {
-        body: JSON.stringify({ redeem_request_id: redeemRequestId }),
+        body: JSON.stringify({
+          ...(creditId ? { credit_id: creditId } : {}),
+          redeem_request_id: redeemRequestId,
+        }),
         headers: jsonHeaders(tokens, userAgent),
         method: "POST",
       }).pipe(Effect.flatMap(validateConsumeResetResponse)),
