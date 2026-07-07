@@ -1,7 +1,7 @@
 {
   "name": "@mynameistito/codex-usage",
   "version": "1.0.3",
-  "private": true,
+  "private": false,
   "description": "CLI for inspecting Codex usage windows and reset credits.",
   "repository": {
     "type": "git",
