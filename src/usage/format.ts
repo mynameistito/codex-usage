@@ -4,7 +4,11 @@ import type {
   NormalizedUsage,
   RateLimitResetCredit,
   RateLimitResetCreditsPayload,
-} from "@/types.js";
+} from "@/codex/types.js";
+
+interface FormatUsageOptions {
+  readonly title?: string;
+}
 
 const titleCase = (value: string): string =>
   value.length === 0
@@ -27,7 +31,9 @@ const formatPlanType = (planType: string): string => {
   return planType.split("_").filter(Boolean).map(titleCase).join(" ");
 };
 
-const formatDateTime = (value: Date | string | null | undefined): string => {
+type NullableDateInput = Date | string | null;
+
+const formatDateTime = (value: NullableDateInput | undefined): string => {
   if (!value) {
     return "None";
   }
@@ -86,9 +92,12 @@ const formatWindow = (window: NormalizedRateLimitWindow): string => {
   ].join("\n");
 };
 
-export const formatUsage = (usage: NormalizedUsage): string => {
+export const formatUsage = (
+  usage: NormalizedUsage,
+  options: FormatUsageOptions = {}
+): string => {
   const lines = [
-    "Codex usage",
+    options.title ?? "Codex usage",
     `Plan: ${formatPlanType(usage.planType)}`,
     `Captured: ${formatDateTime(usage.capturedAt)}`,
   ];
@@ -115,7 +124,9 @@ export const formatUsage = (usage: NormalizedUsage): string => {
   return `${lines.join("\n")}\n`;
 };
 
-const daysUntil = (value: string | null | undefined): string => {
+type NullableString = string | null;
+
+const daysUntil = (value: NullableString | undefined): string => {
   if (!value) {
     return "";
   }

@@ -8,7 +8,7 @@ import type {
   RateLimitStatusDetails,
   RateLimitWindowSnapshot,
   SpendControlLimitDetails,
-} from "@/types.js";
+} from "@/codex/types.js";
 
 const secondsToMinutes = (seconds: number): number | null => {
   if (!Number.isFinite(seconds) || seconds <= 0) {

@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { Effect } from "effect";
 
 import { parseArgs, runCli } from "@/cli.js";
+
+const requirePackageJson = createRequire(import.meta.url);
+const packageJson = requirePackageJson("../package.json") as {
+  readonly name: string;
+  readonly version: string;
+};
 
 const testBaseUrl = "https://example.test/backend-api";
 const originalFetch = globalThis.fetch;
@@ -68,14 +75,16 @@ afterEach(async () => {
 });
 
 describe("parseArgs", () => {
-  test("defaults to status", () => {
-    expect(parseArgs([])).toEqual({
-      authPath: undefined,
-      baseUrl: undefined,
+  test("defaults to status", async () => {
+    const parsed = await Effect.runPromise(parseArgs([]));
+
+    expect(parsed).toEqual({
       command: "status",
       confirm: false,
       json: false,
     });
+    expect(parsed.authPath).toBeUndefined();
+    expect(parsed.baseUrl).toBeUndefined();
   });
 
   test("requires explicit confirmation for reset through runCli", async () => {
@@ -87,8 +96,12 @@ describe("parseArgs", () => {
     }
   });
 
-  test("help takes precedence over later commands", () => {
-    expect(parseArgs(["--help", "reset", "--confirm"]).command).toBe("help");
+  test("help takes precedence over later commands", async () => {
+    const parsed = await Effect.runPromise(
+      parseArgs(["--help", "reset", "--confirm"])
+    );
+
+    expect(parsed.command).toBe("help");
   });
 
   test("dispatches status json with fake auth and mocked fetch", async () => {
@@ -287,5 +300,42 @@ describe("parseArgs", () => {
         "Base URL must use HTTPS unless it is localhost"
       );
     }
+  });
+
+  test("exits with usage code for invalid CLI base URLs", async () => {
+    const authPath = await createAuthFile();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "src/cli.ts",
+        "status",
+        "--auth",
+        authPath,
+        "--base-url",
+        "http://example.test",
+      ],
+      { stderr: "pipe", stdout: "pipe" }
+    );
+
+    const [exitCode, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
+
+    expect(exitCode).toBe(2);
+    expect(stderr).toContain("Base URL must use HTTPS unless it is localhost");
+  });
+
+  test("prints package name and version in status output", async () => {
+    const authPath = await createAuthFile();
+    mockFetch({ plan_type: "pro" });
+
+    const output = await Effect.runPromise(
+      runCli(["status", "--auth", authPath, "--base-url", testBaseUrl])
+    );
+
+    expect(output.split("\n")[0]).toBe(
+      `${packageJson.name} v${packageJson.version}`
+    );
   });
 });

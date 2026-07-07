@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatResetCredits, formatUsage } from "@/format.js";
-import { normalizeUsagePayload } from "@/normalize.js";
 import type {
   CodexUsagePayload,
   RateLimitResetCreditsPayload,
-} from "@/types.js";
+} from "@/codex/types.js";
+import { formatResetCredits, formatUsage } from "@/usage/format.js";
+import { normalizeUsagePayload } from "@/usage/normalize.js";
 
 describe("formatUsage", () => {
   test("prints usage windows and reset credits", () => {

@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 
+import type { CodexAuthTokens } from "@/codex/types.js";
 import { CodexAuthError } from "@/errors/index.js";
-import type { CodexAuthTokens } from "@/types.js";
 
 const defaultCodexAuthPath = (): string =>
   path.join(homedir(), ".codex", "auth.json");
@@ -17,14 +17,15 @@ export const parseAuthTokens = (
   value: unknown
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>
   Effect.gen(function* parseAuthTokensEffect() {
-    if (!isRecord(value) || !isRecord(value.tokens)) {
+    const tokens = isRecord(value) ? value["tokens"] : undefined;
+    if (!isRecord(tokens)) {
       return yield* new CodexAuthError({
         message: "Missing tokens object in .codex/auth.json",
       });
     }
 
-    const accessToken = value.tokens.access_token;
-    const accountId = value.tokens.account_id;
+    const accessToken = tokens["access_token"];
+    const accountId = tokens["account_id"];
 
     if (typeof accessToken !== "string" || accessToken.length === 0) {
       return yield* new CodexAuthError({
@@ -38,7 +39,7 @@ export const parseAuthTokens = (
       });
     }
 
-    return { accessToken, accountId };
+    return { accessToken: Redacted.make(accessToken), accountId };
   });
 
 export const readCodexAuth = (

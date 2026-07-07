@@ -25,7 +25,8 @@ import {
 
 const program = Effect.gen(function* () {
   const tokens = yield* readCodexAuth();
-  const usage = yield* createCodexClient(tokens).fetchUsage();
+  const client = yield* createCodexClient(tokens);
+  const usage = yield* client.fetchUsage();
 
   return formatUsage(usage);
 });
