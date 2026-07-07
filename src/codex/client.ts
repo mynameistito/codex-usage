@@ -33,6 +33,12 @@ const DEFAULT_USER_AGENT = "codex-cli";
 /** Hostnames that require the `/backend-api` path prefix. */
 const CHATGPT_HOSTNAMES = new Set(["chat.openai.com", "chatgpt.com"]);
 
+/** Options for redeeming a banked reset credit. */
+export interface ConsumeResetCreditOptions {
+  readonly creditId?: string;
+  readonly redeemRequestId?: string;
+}
+
 /** Returns whether `hostname` refers to a loopback interface. */
 const isLoopbackHostname = (hostname: string): boolean => {
   if (hostname === "localhost") {
@@ -85,6 +91,12 @@ const normalizeBaseUrl = (
       });
     }
 
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return yield* new CodexConfigError({
+        message: "Base URL must use HTTP or HTTPS",
+      });
+    }
+
     if (parsed.protocol !== "https:" && !isLoopbackHostname(parsed.hostname)) {
       return yield* new CodexConfigError({
         message: "Base URL must use HTTPS unless it is localhost",
@@ -96,11 +108,18 @@ const normalizeBaseUrl = (
       normalized = normalized.slice(0, -1);
     }
 
-    if (
-      CHATGPT_HOSTNAMES.has(parsed.hostname) &&
-      !parsed.pathname.startsWith("/backend-api")
-    ) {
-      return `${normalized}/backend-api`;
+    if (CHATGPT_HOSTNAMES.has(parsed.hostname)) {
+      const pathname = parsed.pathname.replace(/\/+$/u, "") || "/";
+
+      if (pathname === "/") {
+        return `${normalized}/backend-api`;
+      }
+
+      if (pathname !== "/backend-api") {
+        return yield* new CodexConfigError({
+          message: "ChatGPT base URL path must be /backend-api or omitted",
+        });
+      }
     }
 
     return normalized;
@@ -194,8 +213,7 @@ const requestJson = (
 export interface CodexClient {
   /** Redeems a banked reset credit and returns the API result code. */
   readonly consumeResetCredit: (
-    redeemRequestId?: string,
-    creditId?: string
+    options?: ConsumeResetCreditOptions
   ) => Effect.Effect<ConsumeResetResponse, CodexHttpError | CodexParseError>;
   /** Fetches available banked rate-limit reset credits. */
   readonly fetchResetCredits: () => Effect.Effect<
@@ -225,16 +243,17 @@ export const createCodexClient = (
 
     return {
       consumeResetCredit: (
-        redeemRequestId = randomUUID(),
-        creditId?: string
+        consumeOptions: ConsumeResetCreditOptions = {}
       ): Effect.Effect<
         ConsumeResetResponse,
         CodexHttpError | CodexParseError
       > =>
         requestJson(`${baseUrl}/wham/rate-limit-reset-credits/consume`, {
           body: JSON.stringify({
-            ...(creditId ? { credit_id: creditId } : {}),
-            redeem_request_id: redeemRequestId,
+            ...(consumeOptions.creditId
+              ? { credit_id: consumeOptions.creditId }
+              : {}),
+            redeem_request_id: consumeOptions.redeemRequestId ?? randomUUID(),
           }),
           headers: jsonHeaders(tokens, userAgent),
           method: "POST",

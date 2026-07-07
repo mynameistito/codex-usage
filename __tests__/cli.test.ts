@@ -4,9 +4,9 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 
-import { parseArgs, runCli } from "@/cli.js";
+import { formatUnexpectedCliError, parseArgs, runCli } from "@/cli.js";
 
 const requirePackageJson = createRequire(import.meta.url);
 const packageJson = requirePackageJson("../package.json") as {
@@ -324,6 +324,18 @@ describe("parseArgs", () => {
 
     expect(exitCode).toBe(2);
     expect(stderr).toContain("Base URL must use HTTPS unless it is localhost");
+  });
+
+  test("formats unexpected failures concisely by default", () => {
+    const message = formatUnexpectedCliError(Cause.die("boom"), []);
+
+    expect(message).toBe("An unexpected error occurred");
+  });
+
+  test("formats unexpected failures verbosely with --verbose", () => {
+    const message = formatUnexpectedCliError(Cause.die("boom"), ["--verbose"]);
+
+    expect(message).toContain("boom");
   });
 
   test("prints package name and version in status output", async () => {

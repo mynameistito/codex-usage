@@ -1,7 +1,7 @@
 /**
  * Effect schemas and parsers for Codex API response payloads.
  */
-import { Effect, ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 import type {
   CodexUsagePayload,
@@ -134,15 +134,11 @@ const isObject = (value: unknown): value is object =>
 const parseError = (message: string, value: unknown): CodexParseError =>
   new CodexParseError({ message, value });
 
-/** Maps a schema decode failure into a `CodexParseError` with parse diagnostics. */
+/** Maps a schema decode failure into a `CodexParseError`. */
 const invalidShapeError = (
   invalidShapeMessage: string,
-  value: unknown,
-  error: ParseResult.ParseError
-): CodexParseError => {
-  const details = ParseResult.TreeFormatter.formatErrorSync(error);
-  return parseError(`${invalidShapeMessage}: ${details}`, value);
-};
+  value: unknown
+): CodexParseError => parseError(invalidShapeMessage, value);
 
 /**
  * Decodes an API payload with `schema`, preserving Effect parse diagnostics on
@@ -161,7 +157,7 @@ const parseSchema = <A, I>(params: {
   const decoded = Schema.decodeUnknownEither(params.schema)(params.input);
   if (decoded._tag === "Left") {
     return Effect.fail(
-      invalidShapeError(params.invalidShapeMessage, params.input, decoded.left)
+      invalidShapeError(params.invalidShapeMessage, params.input)
     );
   }
 

@@ -60,6 +60,35 @@ describe("createCodexClient", () => {
     }
   });
 
+  test("rejects unsupported loopback URL schemes", async () => {
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, { baseUrl: "ftp://localhost" })
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must use HTTP or HTTPS"
+      );
+    }
+  });
+
+  test("allows HTTP loopback base URLs", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
+      calls.push(String(input));
+      return Promise.resolve(Response.json({ plan_type: "pro" }));
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) => client.fetchUsage(), {
+        baseUrl: "http://localhost:8787",
+      })
+    );
+
+    expect(calls).toEqual(["http://localhost:8787/wham/usage"]);
+  });
+
   test("rejects base URLs that include credentials", async () => {
     const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://user:pass@example.com" })
@@ -129,6 +158,34 @@ describe("createCodexClient", () => {
     );
 
     expect(calls).toEqual(["https://chatgpt.com/backend-api/wham/usage"]);
+  });
+
+  test("rejects unexpected ChatGPT base URL paths", async () => {
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, { baseUrl: "https://chatgpt.com/foo" })
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "ChatGPT base URL path must be /backend-api or omitted"
+      );
+    }
+  });
+
+  test("rejects ChatGPT paths that only prefix backend-api", async () => {
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, {
+        baseUrl: "https://chatgpt.com/backend-api-v2",
+      })
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "ChatGPT base URL path must be /backend-api or omitted"
+      );
+    }
   });
 
   test("rejects malformed nested rate limit windows", async () => {
@@ -279,5 +336,32 @@ describe("createCodexClient", () => {
         "Consume reset response had an invalid shape"
       );
     }
+  });
+
+  test("sends creditId when provided via options object", async () => {
+    const bodies: unknown[] = [];
+    globalThis.fetch = ((
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      bodies.push(init?.body);
+      return Promise.resolve(
+        Response.json({ code: "reset", windows_reset: 1 })
+      );
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) =>
+        client.consumeResetCredit({
+          creditId: "RateLimitResetCredit_test",
+          redeemRequestId: "redeem-request-id",
+        })
+      )
+    );
+
+    expect(JSON.parse(String(bodies[0]))).toEqual({
+      credit_id: "RateLimitResetCredit_test",
+      redeem_request_id: "redeem-request-id",
+    });
   });
 });

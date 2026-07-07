@@ -55,6 +55,7 @@ Options:
   --json             Print raw normalized JSON for read-only commands.
   -y, --confirm, --yes
                      Required before reset redemption is attempted.
+  -v, --verbose      Print full error details for unexpected failures.
   -h, --help         Show this help.
 `;
 
@@ -289,7 +290,7 @@ const runParsed = (
       });
     }
 
-    const response = yield* client.consumeResetCredit(undefined, credit.id);
+    const response = yield* client.consumeResetCredit({ creditId: credit.id });
     return parsed.json
       ? stringifyJson(response)
       : formatConsumeResetResponse(response);
@@ -304,6 +305,17 @@ export const runCli = (
   args: readonly string[]
 ): Effect.Effect<string, CodexUsageError> =>
   parseArgs(args).pipe(Effect.flatMap(runParsed));
+
+/** Returns whether argv requests verbose unexpected-error output. */
+export const isVerboseCli = (args: readonly string[]): boolean =>
+  args.includes("--verbose") || args.includes("-v");
+
+/** Formats an unexpected CLI failure for stderr. */
+export const formatUnexpectedCliError = (
+  cause: Cause.Cause<unknown>,
+  args: readonly string[]
+): string =>
+  isVerboseCli(args) ? Cause.pretty(cause) : "An unexpected error occurred";
 
 /** Prints a tagged CLI or Codex error and returns the process exit code. */
 const printError = (error: CodexUsageError): number => {
@@ -324,7 +336,8 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const exit = await Effect.runPromiseExit(runCli(process.argv.slice(2)));
+  const cliArgs = process.argv.slice(2);
+  const exit = await Effect.runPromiseExit(runCli(cliArgs));
   if (exit._tag === "Success") {
     const output = exit.value;
     process.stdout.write(output);
@@ -333,7 +346,7 @@ if (
     if (Option.isSome(failure)) {
       process.exitCode = printError(failure.value);
     } else {
-      console.error(Cause.pretty(exit.cause));
+      console.error(formatUnexpectedCliError(exit.cause, cliArgs));
       process.exitCode = 1;
     }
   }

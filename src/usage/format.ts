@@ -142,19 +142,21 @@ export const formatUsage = (
 /** Accepted string inputs for {@link daysUntil}. */
 type NullableString = string | null;
 
-/** Number of milliseconds in one UTC day. */
+/** Number of milliseconds in one calendar day. */
 const millisecondsPerDay = 86_400_000;
 
-/** Returns the UTC midnight timestamp for the calendar day containing `date`. */
-const startOfUtcDay = (date: Date): number =>
-  Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+/** Returns the local-midnight timestamp for the calendar day containing `date`. */
+const startOfLocalDay = (date: Date): number =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 
 /**
- * Counts whole UTC calendar days from `from` until `to`.
- * Same-day values return `0`; the next UTC day returns `1`.
+ * Counts whole local calendar days from `from` until `to`.
+ * Same-day values return `0`; the next local day returns `1`.
  */
 const calendarDaysBetween = (from: Date, to: Date): number =>
-  Math.floor((startOfUtcDay(to) - startOfUtcDay(from)) / millisecondsPerDay);
+  Math.floor(
+    (startOfLocalDay(to) - startOfLocalDay(from)) / millisecondsPerDay
+  );
 
 /**
  * Formats a human-readable expiry countdown for reset-credit timestamps.

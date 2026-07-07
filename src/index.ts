@@ -6,7 +6,7 @@
  */
 export { parseAuthTokens, readCodexAuth } from "@/codex/auth.js";
 export { createCodexClient } from "@/codex/client.js";
-export type { CodexClient } from "@/codex/client.js";
+export type { CodexClient, ConsumeResetCreditOptions } from "@/codex/client.js";
 export {
   CliError,
   CodexAuthError,
