@@ -10,6 +10,7 @@ import type {
   SpendControlLimitDetails,
 } from "@/codex/types.js";
 
+/** Converts a positive window length in seconds to rounded minutes. */
 const secondsToMinutes = (seconds: number): number | null => {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return null;
@@ -18,9 +19,16 @@ const secondsToMinutes = (seconds: number): number | null => {
   return Math.ceil(seconds / 60);
 };
 
+/** Returns whether `minutes` is within five percent of `expected`. */
 const isApproximateWindow = (minutes: number, expected: number): boolean =>
   minutes >= expected * 0.95 && minutes <= expected * 1.05;
 
+/**
+ * Derives a human-readable label for a usage window from its duration.
+ *
+ * @param windowSeconds - Window length reported by the Codex API.
+ * @param kind - Whether the window is primary or secondary.
+ */
 export const limitLabelForWindow = (
   windowSeconds: number,
   kind: "primary" | "secondary"
@@ -57,6 +65,7 @@ export const limitLabelForWindow = (
   return kind === "secondary" ? "secondary usage" : "usage";
 };
 
+/** Clamps a percentage value into the inclusive `0..100` range. */
 const clampPercent = (value: number): number => {
   if (!Number.isFinite(value)) {
     return 0;
@@ -65,6 +74,12 @@ const clampPercent = (value: number): number => {
   return Math.min(100, Math.max(0, value));
 };
 
+/**
+ * Normalizes a single API window snapshot into display-ready fields.
+ *
+ * @param kind - Whether the window is primary or secondary.
+ * @param window - Raw window snapshot from the Codex API.
+ */
 const normalizeWindow = (
   kind: "primary" | "secondary",
   window: RateLimitWindowSnapshot | null | undefined
@@ -88,6 +103,7 @@ const normalizeWindow = (
   };
 };
 
+/** Normalizes the primary and secondary windows for a rate-limit block. */
 const normalizeWindows = (
   details: RateLimitStatusDetails | null | undefined
 ): readonly NormalizedRateLimitWindow[] =>
@@ -96,6 +112,7 @@ const normalizeWindows = (
     normalizeWindow("secondary", details?.secondary_window),
   ].filter((window): window is NormalizedRateLimitWindow => window !== null);
 
+/** Builds a normalized rate-limit record from shared API fields. */
 const normalizeLimit = (params: {
   readonly id: string;
   readonly name: string | null;
@@ -122,6 +139,7 @@ const normalizeLimit = (params: {
   windows: normalizeWindows(params.details),
 });
 
+/** Normalizes an additional metered rate limit from the usage payload. */
 const normalizeAdditionalLimit = (
   planType: string,
   limit: AdditionalRateLimitDetails
@@ -136,6 +154,12 @@ const normalizeAdditionalLimit = (
     rateLimitReachedType: null,
   });
 
+/**
+ * Normalizes a parsed Codex usage payload for formatting or JSON export.
+ *
+ * @param payload - Parsed usage response from the Codex API.
+ * @param capturedAt - Timestamp to record on the normalized snapshot.
+ */
 export const normalizeUsagePayload = (
   payload: CodexUsagePayload,
   capturedAt = new Date()

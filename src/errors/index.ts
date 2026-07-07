@@ -1,3 +1,4 @@
+/** Tagged errors used by the Codex usage CLI and client. */
 export { CodexAuthError } from "@/errors/auth-error.js";
 export { CliError } from "@/errors/cli-error.js";
 export { CodexConfigError } from "@/errors/config-error.js";

@@ -1,3 +1,9 @@
+/**
+ * Public package entry point for the Codex usage CLI library.
+ *
+ * Re-exports the Codex client, auth helpers, formatters, normalizers, types,
+ * and tagged errors used by the CLI and downstream consumers.
+ */
 export { parseAuthTokens, readCodexAuth } from "@/codex/auth.js";
 export { createCodexClient } from "@/codex/client.js";
 export type { CodexClient } from "@/codex/client.js";

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+/**
+ * Command-line entry point for inspecting Codex usage and reset credits.
+ */
 import { pathToFileURL } from "node:url";
 
 import { Cause, Effect, Option } from "effect";
@@ -15,10 +18,16 @@ import {
   formatUsage,
 } from "@/usage/format.js";
 
+/** CLI commands that only display help or usage information. */
 type CliHelpOrStatusCommand = "help" | "status";
+
+/** CLI commands that read or redeem reset credits. */
 type CliResetCommand = "reset" | "resets";
+
+/** Supported top-level CLI commands. */
 type CliCommand = CliHelpOrStatusCommand | CliResetCommand;
 
+/** Immutable parsed CLI arguments. */
 interface ParsedArgs {
   readonly command: CliCommand;
   readonly authPath?: string;
@@ -27,6 +36,7 @@ interface ParsedArgs {
   readonly json: boolean;
 }
 
+/** Built-in help text printed for `codex-usage --help`. */
 const HELP_TEXT = `codex-usage
 
 Usage:
@@ -48,6 +58,13 @@ Options:
   -h, --help         Show this help.
 `;
 
+/**
+ * Reads the value that follows a flag-style CLI option.
+ *
+ * @param args - Full argv slice being parsed.
+ * @param index - Index of the option token in `args`.
+ * @param option - Option name used in error messages.
+ */
 const readOptionValue = (
   args: readonly string[],
   index: number,
@@ -65,6 +82,7 @@ const readOptionValue = (
     return value;
   });
 
+/** Mutable parse state accumulated while scanning argv. */
 interface MutableParsedArgs {
   command: CliCommand;
   authPath?: string;
@@ -73,11 +91,19 @@ interface MutableParsedArgs {
   json: boolean;
 }
 
+/** Result of parsing a single argv token. */
 interface ArgParseStep {
   readonly nextIndex: number;
   readonly stop: boolean;
 }
 
+/**
+ * Parses one argv token and updates mutable CLI state.
+ *
+ * @param args - Full argv slice being parsed.
+ * @param index - Index of the token to parse.
+ * @param state - Mutable parse accumulator.
+ */
 const parseNextArg = (
   args: readonly string[],
   index: number,
@@ -122,6 +148,11 @@ const parseNextArg = (
     });
   });
 
+/**
+ * Parses CLI argv into a typed command description.
+ *
+ * @param args - Arguments after the executable name.
+ */
 export const parseArgs = (
   args: readonly string[]
 ): Effect.Effect<ParsedArgs, CliError> =>
@@ -151,9 +182,15 @@ export const parseArgs = (
     };
   });
 
+/** Serializes a value as pretty-printed JSON with a trailing newline. */
 const stringifyJson = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
+/**
+ * Returns the expiry timestamp for credit selection, or `null` when invalid.
+ *
+ * Credits without an expiry are treated as never expiring.
+ */
 const timestampForCreditExpiry = (
   credit: RateLimitResetCredit
 ): number | null => {
@@ -165,6 +202,12 @@ const timestampForCreditExpiry = (
   return Number.isNaN(timestamp) ? null : timestamp;
 };
 
+/**
+ * Selects the soonest-expiring available reset credit for redemption.
+ *
+ * @param credits - Reset credits returned by the Codex API.
+ * @param now - Current timestamp used for expiry comparisons.
+ */
 const pickSoonestExpiringCredit = (
   credits: readonly RateLimitResetCredit[],
   now = Date.now()
@@ -194,9 +237,15 @@ const pickSoonestExpiringCredit = (
   );
 };
 
+/** Builds optional {@link CodexClientOptions} from parsed CLI args. */
 const clientOptionsForArgs = (parsed: ParsedArgs) =>
   parsed.baseUrl === undefined ? {} : { baseUrl: parsed.baseUrl };
 
+/**
+ * Executes a parsed CLI command and returns the output to print.
+ *
+ * @param parsed - Parsed CLI arguments.
+ */
 const runParsed = (
   parsed: ParsedArgs
 ): Effect.Effect<string, CodexUsageError> =>
@@ -246,11 +295,17 @@ const runParsed = (
       : formatConsumeResetResponse(response);
   });
 
+/**
+ * Parses argv and runs the requested CLI command.
+ *
+ * @param args - Arguments after the executable name.
+ */
 export const runCli = (
   args: readonly string[]
 ): Effect.Effect<string, CodexUsageError> =>
   parseArgs(args).pipe(Effect.flatMap(runParsed));
 
+/** Prints a tagged CLI or Codex error and returns the process exit code. */
 const printError = (error: CodexUsageError): number => {
   if (error._tag === "CodexHttpError") {
     console.error(`${error.message}: HTTP ${error.status} ${error.statusText}`);

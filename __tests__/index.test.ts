@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -13,6 +13,45 @@ import {
   CodexParseError,
 } from "@/index.js";
 import type { CodexUsageError } from "@/index.js";
+
+/** Path to the built CLI artifact exercised by integration tests. */
+const distCliPath = "dist/cli.js";
+
+/** Returns the newest modification time among TypeScript sources under `directory`. */
+const newestSourceMtime = (directory: string): number => {
+  let newest = 0;
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, newestSourceMtime(entryPath));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".ts")) {
+      newest = Math.max(newest, statSync(entryPath).mtimeMs);
+    }
+  }
+
+  return newest;
+};
+
+/** Returns whether `dist/cli.js` is missing or older than current source inputs. */
+const distCliIsStale = (): boolean => {
+  if (!existsSync(distCliPath)) {
+    return true;
+  }
+
+  const distMtime = statSync(distCliPath).mtimeMs;
+  const sourceMtime = Math.max(
+    newestSourceMtime("src"),
+    statSync("package.json").mtimeMs,
+    statSync("tsdown.config.ts").mtimeMs
+  );
+
+  return sourceMtime > distMtime;
+};
 
 describe("public exports", () => {
   test("exports error classes from the package root", () => {
@@ -40,7 +79,7 @@ describe("public exports", () => {
   });
 
   test("built CLI prints the published package version", async () => {
-    if (!existsSync("dist/cli.js")) {
+    if (distCliIsStale()) {
       await Bun.$`bun run build`.quiet();
     }
 

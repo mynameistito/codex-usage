@@ -21,12 +21,19 @@ import {
 } from "@/errors/index.js";
 import { normalizeUsagePayload } from "@/usage/normalize.js";
 
+/** Default ChatGPT backend API base URL. */
 const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api";
+
+/** Default network timeout for Codex API requests. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Default `User-Agent` header sent to the Codex API. */
 const DEFAULT_USER_AGENT = "codex-cli";
 
+/** Hostnames that require the `/backend-api` path prefix. */
 const CHATGPT_HOSTNAMES = new Set(["chat.openai.com", "chatgpt.com"]);
 
+/** Returns whether `hostname` refers to a loopback interface. */
 const isLoopbackHostname = (hostname: string): boolean => {
   if (hostname === "localhost") {
     return true;
@@ -47,6 +54,11 @@ const isLoopbackHostname = (hostname: string): boolean => {
   return hostname === "::1";
 };
 
+/**
+ * Normalizes and validates a Codex API base URL.
+ *
+ * @param baseUrl - Candidate base URL. Defaults to {@link DEFAULT_BASE_URL}.
+ */
 const normalizeBaseUrl = (
   baseUrl = DEFAULT_BASE_URL
 ): Effect.Effect<string, CodexConfigError> =>
@@ -94,6 +106,7 @@ const normalizeBaseUrl = (
     return normalized;
   });
 
+/** Builds JSON request headers for authenticated Codex POST requests. */
 const jsonHeaders = (
   tokens: CodexAuthTokens,
   userAgent: string
@@ -104,6 +117,7 @@ const jsonHeaders = (
   "User-Agent": userAgent,
 });
 
+/** Builds request headers for authenticated Codex GET requests. */
 const getHeaders = (
   tokens: CodexAuthTokens,
   userAgent: string
@@ -113,6 +127,12 @@ const getHeaders = (
   "User-Agent": userAgent,
 });
 
+/**
+ * Performs an HTTP request and parses the response body as JSON.
+ *
+ * @param url - Fully qualified request URL.
+ * @param init - Fetch request options.
+ */
 const requestJson = (
   url: string,
   init: RequestInit
@@ -170,21 +190,31 @@ const requestJson = (
     });
   });
 
+/** Typed Codex API client for usage and reset-credit endpoints. */
 export interface CodexClient {
+  /** Redeems a banked reset credit and returns the API result code. */
   readonly consumeResetCredit: (
     redeemRequestId?: string,
     creditId?: string
   ) => Effect.Effect<ConsumeResetResponse, CodexHttpError | CodexParseError>;
+  /** Fetches available banked rate-limit reset credits. */
   readonly fetchResetCredits: () => Effect.Effect<
     RateLimitResetCreditsPayload,
     CodexHttpError | CodexParseError
   >;
+  /** Fetches and normalizes the current Codex usage snapshot. */
   readonly fetchUsage: () => Effect.Effect<
     NormalizedUsage,
     CodexHttpError | CodexParseError
   >;
 }
 
+/**
+ * Creates an authenticated Codex API client.
+ *
+ * @param tokens - Redacted credentials from {@link readCodexAuth}.
+ * @param options - Optional base URL and user-agent overrides.
+ */
 export const createCodexClient = (
   tokens: CodexAuthTokens,
   options: CodexClientOptions = {}

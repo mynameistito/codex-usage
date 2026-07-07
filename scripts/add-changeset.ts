@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Non-interactive changeset creator for AI agents
+ * Non-interactive changeset creator for AI agents.
  *
  * Usage:
  *   bun run ./scripts/add-changeset.ts <type> <summary>
@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
+/** Subset of `package.json` fields read by this script. */
 interface PackageJson {
   dependencies?: Record<string, unknown>;
   devDependencies?: Record<string, unknown>;
@@ -23,14 +24,24 @@ interface PackageJson {
   peerDependencies?: Record<string, unknown>;
 }
 
+/** Supported Changesets semver bump types. */
 type ChangesetType = "patch" | "minor" | "major";
 
+/** Filename used to locate the project root. */
 const PACKAGE_JSON_FILENAME = "package.json";
+
+/** Allowed Changesets bump types. */
 const changesetTypes = ["patch", "minor", "major"] as const;
 
+/** Returns whether `type` is a supported Changesets bump type. */
 const isChangesetType = (type: string | undefined): type is ChangesetType =>
   changesetTypes.includes(type as ChangesetType);
 
+/**
+ * Walks parent directories from `startDir` until a `package.json` is found.
+ *
+ * @param startDir - Directory to begin searching from.
+ */
 const findProjectRoot = (startDir: string) => {
   let currentDir = startDir;
 
@@ -50,6 +61,11 @@ const findProjectRoot = (startDir: string) => {
   process.exit(1);
 };
 
+/**
+ * Reads and parses `package.json` from `packageJsonPath`.
+ *
+ * @param packageJsonPath - Absolute path to `package.json`.
+ */
 const readPackageJson = (packageJsonPath: string) => {
   try {
     return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as PackageJson;
@@ -60,6 +76,11 @@ const readPackageJson = (packageJsonPath: string) => {
   }
 };
 
+/**
+ * Returns the package name from parsed `package.json` metadata.
+ *
+ * @param packageJson - Parsed package metadata.
+ */
 const getPackageName = (packageJson: PackageJson) => {
   if (typeof packageJson.name !== "string" || !packageJson.name.trim()) {
     console.error("package.json must include a non-empty name field");
@@ -69,6 +90,7 @@ const getPackageName = (packageJson: PackageJson) => {
   return packageJson.name;
 };
 
+/** Returns whether `@changesets/cli` is declared in `package.json`. */
 const hasChangesetsCliDependency = (packageJson: PackageJson) =>
   Boolean(
     packageJson.dependencies?.["@changesets/cli"] ||
@@ -77,6 +99,12 @@ const hasChangesetsCliDependency = (packageJson: PackageJson) =>
     packageJson.peerDependencies?.["@changesets/cli"]
   );
 
+/**
+ * Verifies that `@changesets/cli` is declared and installed.
+ *
+ * @param packageJson - Parsed package metadata.
+ * @param projectRoot - Repository root directory.
+ */
 const assertChangesetsCliInstalled = (
   packageJson: PackageJson,
   projectRoot: string
@@ -100,6 +128,11 @@ const assertChangesetsCliInstalled = (
   }
 };
 
+/**
+ * Parses and validates the requested Changesets bump type.
+ *
+ * @param type - Raw CLI type argument.
+ */
 const parseChangesetType = (type: string | undefined): ChangesetType => {
   if (isChangesetType(type)) {
     return type;
@@ -109,6 +142,11 @@ const parseChangesetType = (type: string | undefined): ChangesetType => {
   process.exit(1);
 };
 
+/**
+ * Generates a unique changeset filename inside `.changeset`.
+ *
+ * @param changesetDir - Absolute path to the `.changeset` directory.
+ */
 const createChangesetFilename = (changesetDir: string) => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const id = randomBytes(4).toString("hex");

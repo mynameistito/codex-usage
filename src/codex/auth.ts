@@ -7,12 +7,19 @@ import { Effect, Redacted } from "effect";
 import type { CodexAuthTokens } from "@/codex/types.js";
 import { CodexAuthError } from "@/errors/index.js";
 
+/** Returns the default Codex auth file path under the user home directory. */
 const defaultCodexAuthPath = (): string =>
   path.join(homedir(), ".codex", "auth.json");
 
+/** Returns whether `value` is a plain object record. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+/**
+ * Parses a decoded `auth.json` object into redacted Codex API credentials.
+ *
+ * @param value - Parsed JSON value from a Codex auth file.
+ */
 export const parseAuthTokens = (
   value: unknown
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>
@@ -42,6 +49,11 @@ export const parseAuthTokens = (
     return { accessToken: Redacted.make(accessToken), accountId };
   });
 
+/**
+ * Reads and parses Codex credentials from `auth.json`.
+ *
+ * @param authPath - Path to the auth file. Defaults to `~/.codex/auth.json`.
+ */
 export const readCodexAuth = (
   authPath = defaultCodexAuthPath()
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>
