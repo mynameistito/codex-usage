@@ -104,6 +104,14 @@ describe("parseArgs", () => {
     expect(parsed.command).toBe("help");
   });
 
+  test("accepts verbose flags without treating them as unknown arguments", async () => {
+    const parsed = await Effect.runPromise(
+      parseArgs(["status", "--verbose", "-v"])
+    );
+
+    expect(parsed.command).toBe("status");
+  });
+
   test("dispatches status json with fake auth and mocked fetch", async () => {
     const authPath = await createAuthFile();
     const calls = mockFetch({

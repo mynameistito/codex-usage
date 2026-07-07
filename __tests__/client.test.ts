@@ -338,6 +338,44 @@ describe("createCodexClient", () => {
     }
   });
 
+  test("rejects legacy positional string arguments", async () => {
+    const exit = await Effect.runPromiseExit(
+      withClient((client) =>
+        client.consumeResetCredit(
+          "redeem-request-id" as unknown as Parameters<
+            CodexClient["consumeResetCredit"]
+          >[0]
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain("expects an options object");
+    }
+  });
+
+  test("treats null options as defaults", async () => {
+    const bodies: unknown[] = [];
+    globalThis.fetch = ((
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      bodies.push(init?.body);
+      return Promise.resolve(
+        Response.json({ code: "reset", windows_reset: 1 })
+      );
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) => client.consumeResetCredit(null))
+    );
+
+    expect(JSON.parse(String(bodies[0]))).toEqual({
+      redeem_request_id: expect.any(String),
+    });
+  });
+
   test("sends creditId when provided via options object", async () => {
     const bodies: unknown[] = [];
     globalThis.fetch = ((

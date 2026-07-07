@@ -128,6 +128,10 @@ const parseNextArg = (
       return { nextIndex: index + 1, stop: false };
     }
 
+    if (arg === "-v" || arg === "--verbose") {
+      return { nextIndex: index + 1, stop: false };
+    }
+
     if (arg === "--auth") {
       state.authPath = yield* readOptionValue(args, index, arg);
       return { nextIndex: index + 2, stop: false };

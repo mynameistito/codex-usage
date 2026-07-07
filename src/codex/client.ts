@@ -39,6 +39,37 @@ export interface ConsumeResetCreditOptions {
   readonly redeemRequestId?: string;
 }
 
+/** Returns whether `value` is a plain consume-reset options object. */
+const isConsumeResetCreditOptions = (
+  value: unknown
+): value is ConsumeResetCreditOptions =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Normalizes consume-reset options and rejects legacy positional callers.
+ *
+ * @param consumeOptions - Options object, or `undefined`/`null` for defaults.
+ */
+const normalizeConsumeResetCreditOptions = (
+  consumeOptions?: ConsumeResetCreditOptions | null
+): Effect.Effect<ConsumeResetCreditOptions, CodexParseError> => {
+  if (consumeOptions === undefined || consumeOptions === null) {
+    return Effect.succeed({});
+  }
+
+  if (!isConsumeResetCreditOptions(consumeOptions)) {
+    return Effect.fail(
+      new CodexParseError({
+        message:
+          "consumeResetCredit expects an options object; pass { creditId?, redeemRequestId? } instead of positional arguments",
+        value: consumeOptions,
+      })
+    );
+  }
+
+  return Effect.succeed(consumeOptions);
+};
+
 /** Returns whether `hostname` refers to a loopback interface. */
 const isLoopbackHostname = (hostname: string): boolean => {
   if (hostname === "localhost") {
@@ -213,7 +244,7 @@ const requestJson = (
 export interface CodexClient {
   /** Redeems a banked reset credit and returns the API result code. */
   readonly consumeResetCredit: (
-    options?: ConsumeResetCreditOptions
+    options?: ConsumeResetCreditOptions | null
   ) => Effect.Effect<ConsumeResetResponse, CodexHttpError | CodexParseError>;
   /** Fetches available banked rate-limit reset credits. */
   readonly fetchResetCredits: () => Effect.Effect<
@@ -243,21 +274,30 @@ export const createCodexClient = (
 
     return {
       consumeResetCredit: (
-        consumeOptions: ConsumeResetCreditOptions = {}
+        consumeOptions?: ConsumeResetCreditOptions | null
       ): Effect.Effect<
         ConsumeResetResponse,
         CodexHttpError | CodexParseError
       > =>
-        requestJson(`${baseUrl}/wham/rate-limit-reset-credits/consume`, {
-          body: JSON.stringify({
-            ...(consumeOptions.creditId
-              ? { credit_id: consumeOptions.creditId }
-              : {}),
-            redeem_request_id: consumeOptions.redeemRequestId ?? randomUUID(),
-          }),
-          headers: jsonHeaders(tokens, userAgent),
-          method: "POST",
-        }).pipe(Effect.flatMap(parseConsumeResetResponse)),
+        Effect.gen(function* consumeResetCreditEffect() {
+          const resolvedOptions =
+            yield* normalizeConsumeResetCreditOptions(consumeOptions);
+
+          return yield* requestJson(
+            `${baseUrl}/wham/rate-limit-reset-credits/consume`,
+            {
+              body: JSON.stringify({
+                ...(resolvedOptions.creditId
+                  ? { credit_id: resolvedOptions.creditId }
+                  : {}),
+                redeem_request_id:
+                  resolvedOptions.redeemRequestId ?? randomUUID(),
+              }),
+              headers: jsonHeaders(tokens, userAgent),
+              method: "POST",
+            }
+          ).pipe(Effect.flatMap(parseConsumeResetResponse));
+        }),
 
       fetchResetCredits: (): Effect.Effect<
         RateLimitResetCreditsPayload,
