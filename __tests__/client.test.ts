@@ -3,6 +3,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 
 import { createCodexClient } from "@/client.js";
+import type { CodexClient } from "@/client.js";
+import type { CodexConfigError } from "@/errors/config-error.js";
+import type { CodexClientOptions } from "@/types.js";
 
 const tokens = {
   accessToken: "access-token",
@@ -10,6 +13,14 @@ const tokens = {
 };
 
 const originalFetch = globalThis.fetch;
+
+const defaultOptions: CodexClientOptions = { baseUrl: "https://example.com" };
+
+const withClient = <A, E>(
+  run: (client: CodexClient) => Effect.Effect<A, E>,
+  options: CodexClientOptions = defaultOptions
+): Effect.Effect<A, E | CodexConfigError> =>
+  createCodexClient(tokens, options).pipe(Effect.flatMap(run));
 
 const mockResponse = (body: unknown): void => {
   globalThis.fetch = (() =>
@@ -25,7 +36,7 @@ describe("createCodexClient", () => {
     mockResponse([]);
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, { baseUrl: "https://example.com" }).fetchUsage()
+      withClient((client) => client.fetchUsage())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -36,28 +47,56 @@ describe("createCodexClient", () => {
     }
   });
 
-  test("rejects insecure remote base URLs", () => {
-    expect(() =>
+  test("rejects insecure remote base URLs", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "http://example.com" })
-    ).toThrow("Base URL must use HTTPS unless it is localhost");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must use HTTPS unless it is localhost"
+      );
+    }
   });
 
-  test("rejects base URLs that include credentials", () => {
-    expect(() =>
+  test("rejects base URLs that include credentials", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://user:pass@example.com" })
-    ).toThrow("Base URL must not include credentials");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must not include credentials"
+      );
+    }
   });
 
-  test("rejects base URLs that include query strings", () => {
-    expect(() =>
+  test("rejects base URLs that include query strings", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://example.com?query=value" })
-    ).toThrow("Base URL must not include a query string or fragment");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must not include a query string or fragment"
+      );
+    }
   });
 
-  test("rejects base URLs that include fragments", () => {
-    expect(() =>
+  test("rejects base URLs that include fragments", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://example.com#fragment" })
-    ).toThrow("Base URL must not include a query string or fragment");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must not include a query string or fragment"
+      );
+    }
   });
 
   test("only appends backend-api for exact ChatGPT hostnames", async () => {
@@ -68,9 +107,9 @@ describe("createCodexClient", () => {
     }) as typeof fetch;
 
     await Effect.runPromise(
-      createCodexClient(tokens, {
+      withClient((client) => client.fetchUsage(), {
         baseUrl: "https://chatgpt.com.evil.test",
-      }).fetchUsage()
+      })
     );
 
     expect(calls).toEqual(["https://chatgpt.com.evil.test/wham/usage"]);
@@ -84,7 +123,9 @@ describe("createCodexClient", () => {
     }) as typeof fetch;
 
     await Effect.runPromise(
-      createCodexClient(tokens, { baseUrl: "https://chatgpt.com" }).fetchUsage()
+      withClient((client) => client.fetchUsage(), {
+        baseUrl: "https://chatgpt.com",
+      })
     );
 
     expect(calls).toEqual(["https://chatgpt.com/backend-api/wham/usage"]);
@@ -99,7 +140,7 @@ describe("createCodexClient", () => {
     });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, { baseUrl: "https://example.com" }).fetchUsage()
+      withClient((client) => client.fetchUsage())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -114,9 +155,7 @@ describe("createCodexClient", () => {
     mockResponse([]);
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -131,9 +170,7 @@ describe("createCodexClient", () => {
     mockResponse({ available_count: "not-a-number" });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -148,9 +185,7 @@ describe("createCodexClient", () => {
     mockResponse({ credits: [null] });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -165,9 +200,7 @@ describe("createCodexClient", () => {
     mockResponse({ credits: [{ expires_at: 123 }] });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -182,9 +215,7 @@ describe("createCodexClient", () => {
     mockResponse([]);
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).consumeResetCredit()
+      withClient((client) => client.consumeResetCredit())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -199,9 +230,7 @@ describe("createCodexClient", () => {
     mockResponse({ code: "reset", windows_reset: "not-a-number" });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).consumeResetCredit()
+      withClient((client) => client.consumeResetCredit())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -228,11 +257,7 @@ describe("createCodexClient", () => {
 
     const responses = await Promise.all(
       codes.map(() =>
-        Effect.runPromise(
-          createCodexClient(tokens, {
-            baseUrl: "https://example.com",
-          }).consumeResetCredit()
-        )
+        Effect.runPromise(withClient((client) => client.consumeResetCredit()))
       )
     );
 
@@ -245,9 +270,7 @@ describe("createCodexClient", () => {
     mockResponse({ code: "unexpected", windows_reset: 1 });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).consumeResetCredit()
+      withClient((client) => client.consumeResetCredit())
     );
 
     expect(exit._tag).toBe("Failure");

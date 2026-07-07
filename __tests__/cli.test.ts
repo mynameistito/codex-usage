@@ -68,14 +68,16 @@ afterEach(async () => {
 });
 
 describe("parseArgs", () => {
-  test("defaults to status", () => {
-    expect(parseArgs([])).toEqual({
-      authPath: undefined,
-      baseUrl: undefined,
+  test("defaults to status", async () => {
+    const parsed = await Effect.runPromise(parseArgs([]));
+
+    expect(parsed).toEqual({
       command: "status",
       confirm: false,
       json: false,
     });
+    expect(parsed.authPath).toBeUndefined();
+    expect(parsed.baseUrl).toBeUndefined();
   });
 
   test("requires explicit confirmation for reset through runCli", async () => {
@@ -87,8 +89,12 @@ describe("parseArgs", () => {
     }
   });
 
-  test("help takes precedence over later commands", () => {
-    expect(parseArgs(["--help", "reset", "--confirm"]).command).toBe("help");
+  test("help takes precedence over later commands", async () => {
+    const parsed = await Effect.runPromise(
+      parseArgs(["--help", "reset", "--confirm"])
+    );
+
+    expect(parsed.command).toBe("help");
   });
 
   test("dispatches status json with fake auth and mocked fetch", async () => {

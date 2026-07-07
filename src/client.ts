@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { Effect } from "effect";
 
-import { CodexHttpError, CodexParseError } from "@/errors/index.js";
+import {
+  CodexConfigError,
+  CodexHttpError,
+  CodexParseError,
+} from "@/errors/index.js";
 import { normalizeUsagePayload } from "@/normalize.js";
 import type {
   CodexAuthTokens,
@@ -35,22 +39,48 @@ const isOptionalString = (value: unknown): boolean =>
 const isOptionalNullableString = (value: unknown): boolean =>
   value === null || value === undefined || typeof value === "string";
 
-const isRateLimitWindowSnapshot = (value: unknown): boolean =>
-  isObject(value) &&
-  typeof value.used_percent === "number" &&
-  typeof value.limit_window_seconds === "number" &&
-  typeof value.reset_after_seconds === "number" &&
-  typeof value.reset_at === "number";
+const isRateLimitWindowSnapshot = (value: unknown): boolean => {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  if (typeof value.used_percent !== "number") {
+    return false;
+  }
+
+  if (typeof value.limit_window_seconds !== "number") {
+    return false;
+  }
+
+  if (typeof value.reset_after_seconds !== "number") {
+    return false;
+  }
+
+  return typeof value.reset_at === "number";
+};
 
 const isOptionalRateLimitWindowSnapshot = (value: unknown): boolean =>
   value === null || value === undefined || isRateLimitWindowSnapshot(value);
 
-const isRateLimitStatusDetails = (value: unknown): boolean =>
-  isObject(value) &&
-  isOptionalBoolean(value.allowed) &&
-  isOptionalBoolean(value.limit_reached) &&
-  isOptionalRateLimitWindowSnapshot(value.primary_window) &&
-  isOptionalRateLimitWindowSnapshot(value.secondary_window);
+const isRateLimitStatusDetails = (value: unknown): boolean => {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  if (!isOptionalBoolean(value.allowed)) {
+    return false;
+  }
+
+  if (!isOptionalBoolean(value.limit_reached)) {
+    return false;
+  }
+
+  if (!isOptionalRateLimitWindowSnapshot(value.primary_window)) {
+    return false;
+  }
+
+  return isOptionalRateLimitWindowSnapshot(value.secondary_window);
+};
 
 const isOptionalRateLimitStatusDetails = (value: unknown): boolean =>
   value === null || value === undefined || isRateLimitStatusDetails(value);
@@ -64,15 +94,37 @@ const isCreditStatusDetails = (value: unknown): boolean =>
 const isOptionalCreditStatusDetails = (value: unknown): boolean =>
   value === null || value === undefined || isCreditStatusDetails(value);
 
-const isSpendControlLimitDetails = (value: unknown): boolean =>
-  isObject(value) &&
-  isOptionalString(value.limit) &&
-  isOptionalString(value.used) &&
-  isOptionalString(value.remaining) &&
-  isOptionalNumber(value.used_percent) &&
-  isOptionalNumber(value.remaining_percent) &&
-  isOptionalNumber(value.reset_after_seconds) &&
-  isOptionalNumber(value.reset_at);
+const isSpendControlLimitDetails = (value: unknown): boolean => {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.limit)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.used)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.remaining)) {
+    return false;
+  }
+
+  if (!isOptionalNumber(value.used_percent)) {
+    return false;
+  }
+
+  if (!isOptionalNumber(value.remaining_percent)) {
+    return false;
+  }
+
+  if (!isOptionalNumber(value.reset_after_seconds)) {
+    return false;
+  }
+
+  return isOptionalNumber(value.reset_at);
+};
 
 const isOptionalSpendControlLimitDetails = (value: unknown): boolean =>
   value === null || value === undefined || isSpendControlLimitDetails(value);
@@ -116,16 +168,41 @@ const isConsumeResetCode = (value: unknown): value is ConsumeResetCode =>
   value === "nothing_to_reset" ||
   value === "reset";
 
-const isRateLimitResetCredit = (value: unknown): boolean =>
-  isObject(value) &&
-  isOptionalString(value.id) &&
-  isOptionalString(value.title) &&
-  isOptionalString(value.status) &&
-  isOptionalString(value.profile_user_id) &&
-  isOptionalString(value.granted_at) &&
-  isOptionalString(value.expires_at) &&
-  isOptionalNullableString(value.redeemed_at) &&
-  isOptionalString(value.description);
+const isRateLimitResetCredit = (value: unknown): boolean => {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.id)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.title)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.status)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.profile_user_id)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.granted_at)) {
+    return false;
+  }
+
+  if (!isOptionalString(value.expires_at)) {
+    return false;
+  }
+
+  if (!isOptionalNullableString(value.redeemed_at)) {
+    return false;
+  }
+
+  return isOptionalString(value.description);
+};
 
 const isOptionalRateLimitResetCreditArray = (value: unknown): boolean =>
   value === null ||
@@ -169,10 +246,14 @@ const validateResetCreditsPayload = (
     }
 
     const { available_count: availableCount, credits } = value;
-    if (
-      (availableCount !== undefined && typeof availableCount !== "number") ||
-      !isOptionalRateLimitResetCreditArray(credits)
-    ) {
+    if (availableCount !== undefined && typeof availableCount !== "number") {
+      return yield* parseError(
+        "Reset credits response had an invalid shape",
+        value
+      );
+    }
+
+    if (!isOptionalRateLimitResetCreditArray(credits)) {
       return yield* parseError(
         "Reset credits response had an invalid shape",
         value
@@ -182,6 +263,44 @@ const validateResetCreditsPayload = (
     return value as unknown as RateLimitResetCreditsPayload;
   });
 
+const hasValidUsagePlanType = (value: Record<string, unknown>): boolean =>
+  typeof value.plan_type === "string";
+
+const hasValidUsageRateLimit = (value: Record<string, unknown>): boolean =>
+  isOptionalRateLimitStatusDetails(value.rate_limit);
+
+const hasValidUsageCredits = (value: Record<string, unknown>): boolean =>
+  isOptionalCreditStatusDetails(value.credits);
+
+const hasValidUsageSpendControl = (value: Record<string, unknown>): boolean =>
+  isOptionalSpendControlStatusDetails(value.spend_control);
+
+const hasValidUsageAdditionalRateLimits = (
+  value: Record<string, unknown>
+): boolean =>
+  isOptionalAdditionalRateLimitDetailsArray(value.additional_rate_limits);
+
+const hasValidUsageRateLimitReachedType = (
+  value: Record<string, unknown>
+): boolean => isOptionalRateLimitReachedType(value.rate_limit_reached_type);
+
+const hasValidUsageResetCreditsSummary = (
+  value: Record<string, unknown>
+): boolean =>
+  isOptionalRateLimitResetCreditsSummary(value.rate_limit_reset_credits);
+
+const USAGE_INVALID_SHAPE_MESSAGE = "Usage response had an invalid shape";
+
+const usagePayloadValidators = [
+  hasValidUsagePlanType,
+  hasValidUsageRateLimit,
+  hasValidUsageCredits,
+  hasValidUsageSpendControl,
+  hasValidUsageAdditionalRateLimits,
+  hasValidUsageRateLimitReachedType,
+  hasValidUsageResetCreditsSummary,
+] as const;
+
 const validateUsagePayload = (
   value: unknown
 ): Effect.Effect<CodexUsagePayload, CodexParseError> =>
@@ -190,64 +309,81 @@ const validateUsagePayload = (
       return yield* parseError("Usage response was not an object", value);
     }
 
-    if (
-      typeof value.plan_type !== "string" ||
-      !isOptionalRateLimitStatusDetails(value.rate_limit) ||
-      !isOptionalCreditStatusDetails(value.credits) ||
-      !isOptionalSpendControlStatusDetails(value.spend_control) ||
-      !isOptionalAdditionalRateLimitDetailsArray(
-        value.additional_rate_limits
-      ) ||
-      !isOptionalRateLimitReachedType(value.rate_limit_reached_type) ||
-      !isOptionalRateLimitResetCreditsSummary(value.rate_limit_reset_credits)
-    ) {
-      return yield* parseError("Usage response had an invalid shape", value);
+    for (const isValid of usagePayloadValidators) {
+      if (!isValid(value)) {
+        return yield* parseError(USAGE_INVALID_SHAPE_MESSAGE, value);
+      }
     }
 
     return value as unknown as CodexUsagePayload;
   });
 
-const isLoopbackHostname = (hostname: string): boolean =>
-  hostname === "localhost" ||
-  hostname.endsWith(".localhost") ||
-  hostname === "127.0.0.1" ||
-  hostname === "[::1]" ||
-  hostname === "::1";
-
-const normalizeBaseUrl = (baseUrl = DEFAULT_BASE_URL): string => {
-  let parsed: URL;
-  try {
-    parsed = new URL(baseUrl);
-  } catch (error) {
-    throw new TypeError(`Invalid base URL: ${baseUrl}`, { cause: error });
+const isLoopbackHostname = (hostname: string): boolean => {
+  if (hostname === "localhost") {
+    return true;
   }
 
-  if (parsed.username || parsed.password) {
-    throw new TypeError("Base URL must not include credentials");
+  if (hostname.endsWith(".localhost")) {
+    return true;
   }
 
-  if (parsed.search || parsed.hash) {
-    throw new TypeError("Base URL must not include a query string or fragment");
+  if (hostname === "127.0.0.1") {
+    return true;
   }
 
-  if (parsed.protocol !== "https:" && !isLoopbackHostname(parsed.hostname)) {
-    throw new TypeError("Base URL must use HTTPS unless it is localhost");
+  if (hostname === "[::1]") {
+    return true;
   }
 
-  let normalized = parsed.toString();
-  while (normalized.endsWith("/")) {
-    normalized = normalized.slice(0, -1);
-  }
-
-  if (
-    CHATGPT_HOSTNAMES.has(parsed.hostname) &&
-    !parsed.pathname.startsWith("/backend-api")
-  ) {
-    return `${normalized}/backend-api`;
-  }
-
-  return normalized;
+  return hostname === "::1";
 };
+
+const normalizeBaseUrl = (
+  baseUrl = DEFAULT_BASE_URL
+): Effect.Effect<string, CodexConfigError> =>
+  Effect.gen(function* normalizeBaseUrlEffect() {
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl);
+    } catch (error) {
+      return yield* new CodexConfigError({
+        cause: error,
+        message: `Invalid base URL: ${baseUrl}`,
+      });
+    }
+
+    if (parsed.username || parsed.password) {
+      return yield* new CodexConfigError({
+        message: "Base URL must not include credentials",
+      });
+    }
+
+    if (parsed.search || parsed.hash) {
+      return yield* new CodexConfigError({
+        message: "Base URL must not include a query string or fragment",
+      });
+    }
+
+    if (parsed.protocol !== "https:" && !isLoopbackHostname(parsed.hostname)) {
+      return yield* new CodexConfigError({
+        message: "Base URL must use HTTPS unless it is localhost",
+      });
+    }
+
+    let normalized = parsed.toString();
+    while (normalized.endsWith("/")) {
+      normalized = normalized.slice(0, -1);
+    }
+
+    if (
+      CHATGPT_HOSTNAMES.has(parsed.hostname) &&
+      !parsed.pathname.startsWith("/backend-api")
+    ) {
+      return `${normalized}/backend-api`;
+    }
+
+    return normalized;
+  });
 
 const jsonHeaders = (
   tokens: CodexAuthTokens,
@@ -325,46 +461,65 @@ const requestJson = (
     });
   });
 
+export interface CodexClient {
+  readonly consumeResetCredit: (
+    redeemRequestId?: string,
+    creditId?: string
+  ) => Effect.Effect<ConsumeResetResponse, CodexHttpError | CodexParseError>;
+  readonly fetchResetCredits: () => Effect.Effect<
+    RateLimitResetCreditsPayload,
+    CodexHttpError | CodexParseError
+  >;
+  readonly fetchUsage: () => Effect.Effect<
+    NormalizedUsage,
+    CodexHttpError | CodexParseError
+  >;
+}
+
 export const createCodexClient = (
   tokens: CodexAuthTokens,
   options: CodexClientOptions = {}
-) => {
-  const baseUrl = normalizeBaseUrl(options.baseUrl);
-  const userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
+): Effect.Effect<CodexClient, CodexConfigError> =>
+  Effect.gen(function* createCodexClientEffect() {
+    const baseUrl = yield* normalizeBaseUrl(options.baseUrl);
+    const userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
 
-  return {
-    consumeResetCredit: (
-      redeemRequestId = randomUUID(),
-      creditId?: string
-    ): Effect.Effect<ConsumeResetResponse, CodexHttpError | CodexParseError> =>
-      requestJson(`${baseUrl}/wham/rate-limit-reset-credits/consume`, {
-        body: JSON.stringify({
-          ...(creditId ? { credit_id: creditId } : {}),
-          redeem_request_id: redeemRequestId,
-        }),
-        headers: jsonHeaders(tokens, userAgent),
-        method: "POST",
-      }).pipe(Effect.flatMap(validateConsumeResetResponse)),
+    return {
+      consumeResetCredit: (
+        redeemRequestId = randomUUID(),
+        creditId?: string
+      ): Effect.Effect<
+        ConsumeResetResponse,
+        CodexHttpError | CodexParseError
+      > =>
+        requestJson(`${baseUrl}/wham/rate-limit-reset-credits/consume`, {
+          body: JSON.stringify({
+            ...(creditId ? { credit_id: creditId } : {}),
+            redeem_request_id: redeemRequestId,
+          }),
+          headers: jsonHeaders(tokens, userAgent),
+          method: "POST",
+        }).pipe(Effect.flatMap(validateConsumeResetResponse)),
 
-    fetchResetCredits: (): Effect.Effect<
-      RateLimitResetCreditsPayload,
-      CodexHttpError | CodexParseError
-    > =>
-      requestJson(`${baseUrl}/wham/rate-limit-reset-credits`, {
-        headers: getHeaders(tokens, userAgent),
-        method: "GET",
-      }).pipe(Effect.flatMap(validateResetCreditsPayload)),
+      fetchResetCredits: (): Effect.Effect<
+        RateLimitResetCreditsPayload,
+        CodexHttpError | CodexParseError
+      > =>
+        requestJson(`${baseUrl}/wham/rate-limit-reset-credits`, {
+          headers: getHeaders(tokens, userAgent),
+          method: "GET",
+        }).pipe(Effect.flatMap(validateResetCreditsPayload)),
 
-    fetchUsage: (): Effect.Effect<
-      NormalizedUsage,
-      CodexHttpError | CodexParseError
-    > =>
-      requestJson(`${baseUrl}/wham/usage`, {
-        headers: getHeaders(tokens, userAgent),
-        method: "GET",
-      }).pipe(
-        Effect.flatMap(validateUsagePayload),
-        Effect.map((value) => normalizeUsagePayload(value))
-      ),
-  };
-};
+      fetchUsage: (): Effect.Effect<
+        NormalizedUsage,
+        CodexHttpError | CodexParseError
+      > =>
+        requestJson(`${baseUrl}/wham/usage`, {
+          headers: getHeaders(tokens, userAgent),
+          method: "GET",
+        }).pipe(
+          Effect.flatMap(validateUsagePayload),
+          Effect.map((value) => normalizeUsagePayload(value))
+        ),
+    };
+  });

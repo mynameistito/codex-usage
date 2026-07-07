@@ -25,6 +25,7 @@ interface PackageJson {
 
 type ChangesetType = "patch" | "minor" | "major";
 
+const PACKAGE_JSON_FILENAME = "package.json";
 const changesetTypes = ["patch", "minor", "major"] as const;
 
 const isChangesetType = (type: string | undefined): type is ChangesetType =>
@@ -34,18 +35,18 @@ const findProjectRoot = (startDir: string) => {
   let currentDir = startDir;
 
   while (currentDir !== path.dirname(currentDir)) {
-    if (existsSync(path.join(currentDir, "package.json"))) {
+    if (existsSync(path.join(currentDir, PACKAGE_JSON_FILENAME))) {
       return currentDir;
     }
 
     currentDir = path.dirname(currentDir);
   }
 
-  if (existsSync(path.join(currentDir, "package.json"))) {
+  if (existsSync(path.join(currentDir, PACKAGE_JSON_FILENAME))) {
     return currentDir;
   }
 
-  console.error("Could not find package.json from script location");
+  console.error(`Could not find ${PACKAGE_JSON_FILENAME} from script location`);
   process.exit(1);
 };
 
@@ -87,7 +88,7 @@ const assertChangesetsCliInstalled = (
   }
 
   const requireFromProject = createRequire(
-    path.join(projectRoot, "package.json")
+    path.join(projectRoot, PACKAGE_JSON_FILENAME)
   );
 
   try {
@@ -141,7 +142,8 @@ if (!summary.trim()) {
 }
 
 const projectRoot = findProjectRoot(import.meta.dirname);
-const packageJson = readPackageJson(path.join(projectRoot, "package.json"));
+const packageJsonPath = path.join(projectRoot, PACKAGE_JSON_FILENAME);
+const packageJson = readPackageJson(packageJsonPath);
 const packageName = getPackageName(packageJson);
 assertChangesetsCliInstalled(packageJson, projectRoot);
 

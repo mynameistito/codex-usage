@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   CliError,
   CodexAuthError,
+  CodexConfigError,
   CodexHttpError,
   CodexParseError,
 } from "@/index.js";
@@ -12,6 +13,7 @@ describe("public exports", () => {
   test("exports error classes from the package root", () => {
     const errors: CodexUsageError[] = [
       new CodexAuthError({ message: "missing auth" }),
+      new CodexConfigError({ message: "invalid base URL" }),
       new CodexHttpError({
         body: "{}",
         message: "request failed",
@@ -26,6 +28,7 @@ describe("public exports", () => {
     );
     expect(errors.map((error) => error._tag)).toEqual([
       "CodexAuthError",
+      "CodexConfigError",
       "CodexHttpError",
       "CodexParseError",
     ]);

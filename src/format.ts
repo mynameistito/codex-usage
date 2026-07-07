@@ -27,7 +27,9 @@ const formatPlanType = (planType: string): string => {
   return planType.split("_").filter(Boolean).map(titleCase).join(" ");
 };
 
-const formatDateTime = (value: Date | string | null | undefined): string => {
+type NullableDateInput = Date | string | null;
+
+const formatDateTime = (value: NullableDateInput | undefined): string => {
   if (!value) {
     return "None";
   }
@@ -115,7 +117,9 @@ export const formatUsage = (usage: NormalizedUsage): string => {
   return `${lines.join("\n")}\n`;
 };
 
-const daysUntil = (value: string | null | undefined): string => {
+type NullableString = string | null;
+
+const daysUntil = (value: NullableString | undefined): string => {
   if (!value) {
     return "";
   }
