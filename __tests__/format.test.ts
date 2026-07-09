@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 
 import type {
   CodexUsagePayload,
@@ -83,25 +83,15 @@ describe("formatResetCredits", () => {
     const previousTz = process.env.TZ;
     process.env.TZ = "Pacific/Auckland";
 
-    const RealDate = globalThis.Date;
-    const fixedNow = new RealDate(2026, 6, 7, 23, 0, 0);
-    const dateSpy = spyOn(globalThis, "Date").mockImplementation(((
-      ...args: [] | [string | number | Date]
-    ) => {
-      if (args.length === 0) {
-        return new RealDate(fixedNow);
-      }
-
-      return new RealDate(...(args as [string | number | Date]));
-    }) as unknown as typeof Date);
-    globalThis.Date.now = () => fixedNow.getTime();
+    const fixedNow = new Date(2026, 6, 7, 23, 0, 0);
+    setSystemTime(fixedNow);
 
     try {
       const payload: RateLimitResetCreditsPayload = {
         available_count: 1,
         credits: [
           {
-            expires_at: new RealDate(2026, 6, 8, 1, 0, 0).toISOString(),
+            expires_at: new Date(2026, 6, 8, 1, 0, 0).toISOString(),
             id: "RateLimitResetCredit_local_day",
             status: "available",
             title: "Soon reset",
@@ -112,7 +102,7 @@ describe("formatResetCredits", () => {
       expect(formatResetCredits(payload)).toContain("expires tomorrow");
       expect(formatResetCredits(payload)).not.toContain("expires today");
     } finally {
-      dateSpy.mockRestore();
+      setSystemTime();
       if (previousTz === undefined) {
         delete process.env.TZ;
       } else {

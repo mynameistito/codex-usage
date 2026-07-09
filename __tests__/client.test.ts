@@ -376,6 +376,36 @@ describe("createCodexClient", () => {
     });
   });
 
+  test("reuses redeem_request_id when the consume effect is retried", async () => {
+    const bodies: unknown[] = [];
+    let attempt = 0;
+    globalThis.fetch = ((
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      bodies.push(init?.body);
+      attempt += 1;
+      if (attempt === 1) {
+        return Promise.reject(new DOMException("timeout", "TimeoutError"));
+      }
+      return Promise.resolve(
+        Response.json({ code: "reset", windows_reset: 1 })
+      );
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) => {
+        const consume = client.consumeResetCredit();
+        return consume.pipe(Effect.retry({ times: 1 }));
+      })
+    );
+
+    expect(bodies).toHaveLength(2);
+    const first = JSON.parse(String(bodies[0]));
+    const second = JSON.parse(String(bodies[1]));
+    expect(first.redeem_request_id).toBe(second.redeem_request_id);
+  });
+
   test("sends creditId when provided via options object", async () => {
     const bodies: unknown[] = [];
     globalThis.fetch = ((

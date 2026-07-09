@@ -278,8 +278,10 @@ export const createCodexClient = (
       ): Effect.Effect<
         ConsumeResetResponse,
         CodexHttpError | CodexParseError
-      > =>
-        Effect.gen(function* consumeResetCreditEffect() {
+      > => {
+        const defaultRedeemRequestId = randomUUID();
+
+        return Effect.gen(function* consumeResetCreditEffect() {
           const resolvedOptions =
             yield* normalizeConsumeResetCreditOptions(consumeOptions);
 
@@ -291,13 +293,14 @@ export const createCodexClient = (
                   ? { credit_id: resolvedOptions.creditId }
                   : {}),
                 redeem_request_id:
-                  resolvedOptions.redeemRequestId ?? randomUUID(),
+                  resolvedOptions.redeemRequestId ?? defaultRedeemRequestId,
               }),
               headers: jsonHeaders(tokens, userAgent),
               method: "POST",
             }
           ).pipe(Effect.flatMap(parseConsumeResetResponse));
-        }),
+        });
+      },
 
       fetchResetCredits: (): Effect.Effect<
         RateLimitResetCreditsPayload,
