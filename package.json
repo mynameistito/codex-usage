@@ -32,6 +32,7 @@
     "fix": "ultracite fix",
     "knip": "knip",
     "prepare": "lefthook install",
+    "release": "bun run ./scripts/release.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
