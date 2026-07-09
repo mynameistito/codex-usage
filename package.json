@@ -5,7 +5,7 @@
   "description": "CLI for inspecting Codex usage windows and reset credits.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mynameistito/codex-usage.git"
+    "url": "git+https://github.com/mynameistito/codex-usage.git"
   },
   "bin": {
     "codex-usage": "dist/cli.js"

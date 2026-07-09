@@ -113,7 +113,19 @@ jobs:
             exit 0
           fi
 
-          npm stage publish . --access public --provenance
+          if ! publish_output=$(npm stage publish . --access public --provenance 2>&1); then
+            echo "$publish_output"
+
+            if [[ "$publish_output" == *"Cannot stage previously published version"* ]]; then
+              echo "$package_spec is already published or staged"
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            exit 1
+          fi
+
+          echo "$publish_output"
           echo "staged=true" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
