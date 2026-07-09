@@ -1,5 +1,11 @@
 # @mynameistito/codex-usage
 
+## 1.1.1
+
+### Patch Changes
+
+- af13706: Harden release workflow orchestration
+
 ## 1.1.0
 
 ### Minor Changes
