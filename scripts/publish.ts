@@ -50,7 +50,7 @@ const PUBLISHED_VERSION_CONFLICT = "Cannot stage previously published version";
 
 const releaseCommands = ["github", "npm"] as const;
 
-/** Parses the release subcommand passed to `bun run release`. */
+/** Parses the release subcommand passed to `node --run publish`. */
 export const parseReleaseCommand = (
   command: string | undefined
 ): ReleaseCommand => {
@@ -58,7 +58,7 @@ export const parseReleaseCommand = (
     return command as ReleaseCommand;
   }
 
-  throw new ReleaseError("Usage: bun run release <npm | github>");
+  throw new ReleaseError("Usage: node --run publish -- <npm | github>");
 };
 
 /** Reads and parses package metadata needed by release operations. */

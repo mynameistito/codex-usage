@@ -51,10 +51,10 @@ jobs:
       - name: Publish - npm
         id: publish
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: node --run publish npm
+        run: node --run publish -- npm
 
       - name: Publish - GitHub Release
         if: steps.changesets.outputs.hasChangesets == 'false' && (steps.publish.outputs.published == 'true' || steps.publish.outputs.staged == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node --run publish gh-release
+        run: node --run publish -- github
