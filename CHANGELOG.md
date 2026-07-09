@@ -1,5 +1,20 @@
 # @mynameistito/codex-usage
 
+## 1.1.0
+
+### Minor Changes
+
+- 213ff30: - Change `createCodexClient` to return an `Effect` and report base URL validation failures as `CodexConfigError`.
+  - Export `CodexClient` and `CodexConfigError` from the package root for library consumers.
+  - Move Codex API response parsing to Effect Schema and keep parse failures in the typed error channel.
+  - Wrap auth access tokens with Effect `Redacted` and only unwrap them when creating HTTP authorization headers.
+  - Reorganize source modules into `src/codex` for API/auth/client concerns and `src/usage` for normalization and formatting.
+  - Keep CLI base URL validation failures classified as usage errors with exit code 2.
+  - Print the package name plus actual package version in human-readable usage output.
+  - Add a `dev` script for running the TypeScript CLI directly during local development.
+  - Add packaged CLI smoke coverage so the built `dist/cli.js` path used by `npx` and `bunx` keeps printing the published package version.
+  - Tighten TypeScript configuration and keep Knip aware of Ultracite's indirect ESLint plugin dependencies.
+
 ## 1.0.3
 
 ### Patch Changes
