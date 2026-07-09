@@ -48,13 +48,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish package
+      - name: Publish - npm
         id: publish
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: bun run release npm
+        run: node --run publish npm
 
-      - name: Create GitHub release
+      - name: Publish - GitHub Release
         if: steps.changesets.outputs.hasChangesets == 'false' && (steps.publish.outputs.published == 'true' || steps.publish.outputs.staged == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun run release gh-release
+        run: node --run publish gh-release

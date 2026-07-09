@@ -31,7 +31,7 @@ export type CommandRunner = (
 ) => Promise<CommandResult>;
 
 /** Supported release subcommands. */
-export type ReleaseCommand = "gh-release" | "npm";
+export type ReleaseCommand = "github" | "npm";
 
 /** Error raised for expected release workflow failures. */
 export class ReleaseError extends Error {
@@ -48,7 +48,7 @@ const PACKAGE_JSON_PATH = "package.json";
 const CHANGELOG_PATH = "CHANGELOG.md";
 const PUBLISHED_VERSION_CONFLICT = "Cannot stage previously published version";
 
-const releaseCommands = ["gh-release", "npm"] as const;
+const releaseCommands = ["github", "npm"] as const;
 
 /** Parses the release subcommand passed to `bun run release`. */
 export const parseReleaseCommand = (
@@ -58,7 +58,7 @@ export const parseReleaseCommand = (
     return command as ReleaseCommand;
   }
 
-  throw new ReleaseError("Usage: bun run release <npm | gh-release>");
+  throw new ReleaseError("Usage: bun run release <npm | github>");
 };
 
 /** Reads and parses package metadata needed by release operations. */
