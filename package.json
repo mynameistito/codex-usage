@@ -33,7 +33,7 @@
     "knip": "knip",
     "prepare": "lefthook install",
     "test": "bun test",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "effect": "^3.21.4"
