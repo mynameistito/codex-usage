@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { limitLabelForWindow, normalizeUsagePayload } from "@/normalize.js";
-import type { CodexUsagePayload } from "@/types.js";
+import type { CodexUsagePayload } from "@/codex/types.js";
+import {
+  limitLabelForWindow,
+  normalizeUsagePayload,
+} from "@/usage/normalize.js";
 
 describe("limitLabelForWindow", () => {
   test("labels known Codex windows by duration", () => {

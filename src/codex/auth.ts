@@ -2,29 +2,37 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 
+import type { CodexAuthTokens } from "@/codex/types.js";
 import { CodexAuthError } from "@/errors/index.js";
-import type { CodexAuthTokens } from "@/types.js";
 
+/** Returns the default Codex auth file path under the user home directory. */
 const defaultCodexAuthPath = (): string =>
   path.join(homedir(), ".codex", "auth.json");
 
+/** Returns whether `value` is a plain object record. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+/**
+ * Parses a decoded `auth.json` object into redacted Codex API credentials.
+ *
+ * @param value - Parsed JSON value from a Codex auth file.
+ */
 export const parseAuthTokens = (
   value: unknown
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>
   Effect.gen(function* parseAuthTokensEffect() {
-    if (!isRecord(value) || !isRecord(value.tokens)) {
+    const tokens = isRecord(value) ? value["tokens"] : undefined;
+    if (!isRecord(tokens)) {
       return yield* new CodexAuthError({
         message: "Missing tokens object in .codex/auth.json",
       });
     }
 
-    const accessToken = value.tokens.access_token;
-    const accountId = value.tokens.account_id;
+    const accessToken = tokens["access_token"];
+    const accountId = tokens["account_id"];
 
     if (typeof accessToken !== "string" || accessToken.length === 0) {
       return yield* new CodexAuthError({
@@ -38,9 +46,14 @@ export const parseAuthTokens = (
       });
     }
 
-    return { accessToken, accountId };
+    return { accessToken: Redacted.make(accessToken), accountId };
   });
 
+/**
+ * Reads and parses Codex credentials from `auth.json`.
+ *
+ * @param authPath - Path to the auth file. Defaults to `~/.codex/auth.json`.
+ */
 export const readCodexAuth = (
   authPath = defaultCodexAuthPath()
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>

@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 
-import { formatResetCredits, formatUsage } from "@/format.js";
-import { normalizeUsagePayload } from "@/normalize.js";
 import type {
   CodexUsagePayload,
   RateLimitResetCreditsPayload,
-} from "@/types.js";
+} from "@/codex/types.js";
+import { formatResetCredits, formatUsage } from "@/usage/format.js";
+import { normalizeUsagePayload } from "@/usage/normalize.js";
 
 describe("formatUsage", () => {
   test("prints usage windows and reset credits", () => {
@@ -77,5 +77,37 @@ describe("formatResetCredits", () => {
     };
 
     expect(formatResetCredits(payload)).toContain("expired");
+  });
+
+  test("labels expiry relative to the local calendar day", () => {
+    const previousTz = process.env.TZ;
+    process.env.TZ = "Pacific/Auckland";
+
+    const fixedNow = new Date(2026, 6, 7, 23, 0, 0);
+    setSystemTime(fixedNow);
+
+    try {
+      const payload: RateLimitResetCreditsPayload = {
+        available_count: 1,
+        credits: [
+          {
+            expires_at: new Date(2026, 6, 8, 1, 0, 0).toISOString(),
+            id: "RateLimitResetCredit_local_day",
+            status: "available",
+            title: "Soon reset",
+          },
+        ],
+      };
+
+      expect(formatResetCredits(payload)).toContain("expires tomorrow");
+      expect(formatResetCredits(payload)).not.toContain("expires today");
+    } finally {
+      setSystemTime();
+      if (previousTz === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = previousTz;
+      }
+    }
   });
 });

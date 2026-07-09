@@ -1,27 +1,42 @@
 #!/usr/bin/env node
+/**
+ * Command-line entry point for inspecting Codex usage and reset credits.
+ */
 import { pathToFileURL } from "node:url";
 
-import { Effect } from "effect";
+import { Cause, Effect, Option } from "effect";
 
-import { readCodexAuth } from "@/auth.js";
-import { createCodexClient } from "@/client.js";
+import { readCodexAuth } from "@/codex/auth.js";
+import { createCodexClient } from "@/codex/client.js";
+import type { RateLimitResetCredit } from "@/codex/types.js";
 import { CliError } from "@/errors/index.js";
 import type { CodexUsageError } from "@/errors/index.js";
+import { packageTitle } from "@/package-metadata.js";
 import {
   formatConsumeResetResponse,
   formatResetCredits,
   formatUsage,
-} from "@/format.js";
-import type { RateLimitResetCredit } from "@/types.js";
+} from "@/usage/format.js";
 
+/** CLI commands that only display help or usage information. */
+type CliHelpOrStatusCommand = "help" | "status";
+
+/** CLI commands that read or redeem reset credits. */
+type CliResetCommand = "reset" | "resets";
+
+/** Supported top-level CLI commands. */
+type CliCommand = CliHelpOrStatusCommand | CliResetCommand;
+
+/** Immutable parsed CLI arguments. */
 interface ParsedArgs {
-  readonly command: "help" | "reset" | "resets" | "status";
+  readonly command: CliCommand;
   readonly authPath?: string;
   readonly baseUrl?: string;
   readonly confirm: boolean;
   readonly json: boolean;
 }
 
+/** Built-in help text printed for `codex-usage --help`. */
 const HELP_TEXT = `codex-usage
 
 Usage:
@@ -40,82 +55,147 @@ Options:
   --json             Print raw normalized JSON for read-only commands.
   -y, --confirm, --yes
                      Required before reset redemption is attempted.
+  -v, --verbose      Print full error details for unexpected failures.
   -h, --help         Show this help.
 `;
 
+/**
+ * Reads the value that follows a flag-style CLI option.
+ *
+ * @param args - Full argv slice being parsed.
+ * @param index - Index of the option token in `args`.
+ * @param option - Option name used in error messages.
+ */
 const readOptionValue = (
   args: readonly string[],
   index: number,
   option: string
-): string => {
-  const value = args[index + 1];
-  if (!value || value.startsWith("-")) {
-    throw new CliError({
-      exitCode: 2,
-      message: `Missing value for ${option}`,
-    });
-  }
+): Effect.Effect<string, CliError> =>
+  Effect.gen(function* readOptionValueEffect() {
+    const value = args[index + 1];
+    if (!value || value.startsWith("-")) {
+      return yield* new CliError({
+        exitCode: 2,
+        message: `Missing value for ${option}`,
+      });
+    }
 
-  return value;
-};
+    return value;
+  });
 
-export const parseArgs = (args: readonly string[]): ParsedArgs => {
-  let command: ParsedArgs["command"] = "status";
-  let authPath: string | undefined;
-  let baseUrl: string | undefined;
-  let confirm = false;
-  let json = false;
+/** Mutable parse state accumulated while scanning argv. */
+interface MutableParsedArgs {
+  command: CliCommand;
+  authPath?: string;
+  baseUrl?: string;
+  confirm: boolean;
+  json: boolean;
+}
 
-  for (let index = 0; index < args.length; index += 1) {
+/** Result of parsing a single argv token. */
+interface ArgParseStep {
+  readonly nextIndex: number;
+  readonly stop: boolean;
+}
+
+/**
+ * Parses one argv token and updates mutable CLI state.
+ *
+ * @param args - Full argv slice being parsed.
+ * @param index - Index of the token to parse.
+ * @param state - Mutable parse accumulator.
+ */
+const parseNextArg = (
+  args: readonly string[],
+  index: number,
+  state: MutableParsedArgs
+): Effect.Effect<ArgParseStep, CliError> =>
+  Effect.gen(function* parseNextArgEffect() {
     const arg = args[index];
 
     if (arg === "-h" || arg === "--help") {
-      command = "help";
-      break;
+      state.command = "help";
+      return { nextIndex: index + 1, stop: true };
     }
 
     if (arg === "--json") {
-      json = true;
-      continue;
+      state.json = true;
+      return { nextIndex: index + 1, stop: false };
     }
 
     if (arg === "-y" || arg === "--confirm" || arg === "--yes") {
-      confirm = true;
-      continue;
+      state.confirm = true;
+      return { nextIndex: index + 1, stop: false };
+    }
+
+    if (arg === "-v" || arg === "--verbose") {
+      return { nextIndex: index + 1, stop: false };
     }
 
     if (arg === "--auth") {
-      authPath = readOptionValue(args, index, arg);
-      index += 1;
-      continue;
+      state.authPath = yield* readOptionValue(args, index, arg);
+      return { nextIndex: index + 2, stop: false };
     }
 
     if (arg === "--base-url") {
-      baseUrl = readOptionValue(args, index, arg);
-      index += 1;
-      continue;
+      state.baseUrl = yield* readOptionValue(args, index, arg);
+      return { nextIndex: index + 2, stop: false };
     }
 
     if (arg === "status" || arg === "resets" || arg === "reset") {
-      command = arg;
-      continue;
+      state.command = arg;
+      return { nextIndex: index + 1, stop: false };
     }
 
-    throw new CliError({
+    return yield* new CliError({
       exitCode: 2,
       message: `Unknown argument: ${arg}`,
     });
-  }
+  });
 
-  return { authPath, baseUrl, command, confirm, json };
-};
+/**
+ * Parses CLI argv into a typed command description.
+ *
+ * @param args - Arguments after the executable name.
+ */
+export const parseArgs = (
+  args: readonly string[]
+): Effect.Effect<ParsedArgs, CliError> =>
+  Effect.gen(function* parseArgsEffect() {
+    const state: MutableParsedArgs = {
+      command: "status",
+      confirm: false,
+      json: false,
+    };
 
+    let index = 0;
+    while (index < args.length) {
+      const step = yield* parseNextArg(args, index, state);
+      if (step.stop) {
+        break;
+      }
+
+      index = step.nextIndex;
+    }
+
+    return {
+      ...(state.authPath === undefined ? {} : { authPath: state.authPath }),
+      ...(state.baseUrl === undefined ? {} : { baseUrl: state.baseUrl }),
+      command: state.command,
+      confirm: state.confirm,
+      json: state.json,
+    };
+  });
+
+/** Serializes a value as pretty-printed JSON with a trailing newline. */
 const stringifyJson = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
-const safeErrorMessage = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
-
+/**
+ * Returns the expiry timestamp for credit selection, or `null` when invalid.
+ *
+ * Credits without an expiry are treated as never expiring.
+ */
 const timestampForCreditExpiry = (
   credit: RateLimitResetCredit
 ): number | null => {
@@ -127,6 +207,12 @@ const timestampForCreditExpiry = (
   return Number.isNaN(timestamp) ? null : timestamp;
 };
 
+/**
+ * Selects the soonest-expiring available reset credit for redemption.
+ *
+ * @param credits - Reset credits returned by the Codex API.
+ * @param now - Current timestamp used for expiry comparisons.
+ */
 const pickSoonestExpiringCredit = (
   credits: readonly RateLimitResetCredit[],
   now = Date.now()
@@ -156,6 +242,15 @@ const pickSoonestExpiringCredit = (
   );
 };
 
+/** Builds optional {@link CodexClientOptions} from parsed CLI args. */
+const clientOptionsForArgs = (parsed: ParsedArgs) =>
+  parsed.baseUrl === undefined ? {} : { baseUrl: parsed.baseUrl };
+
+/**
+ * Executes a parsed CLI command and returns the output to print.
+ *
+ * @param parsed - Parsed CLI arguments.
+ */
 const runParsed = (
   parsed: ParsedArgs
 ): Effect.Effect<string, CodexUsageError> =>
@@ -173,18 +268,16 @@ const runParsed = (
     }
 
     const tokens = yield* readCodexAuth(parsed.authPath);
-    const client = yield* Effect.try({
-      catch: (cause) =>
-        new CliError({
-          exitCode: 2,
-          message: safeErrorMessage(cause),
-        }),
-      try: () => createCodexClient(tokens, { baseUrl: parsed.baseUrl }),
-    });
+    const client = yield* createCodexClient(
+      tokens,
+      clientOptionsForArgs(parsed)
+    );
 
     if (parsed.command === "status") {
       const usage = yield* client.fetchUsage();
-      return parsed.json ? stringifyJson(usage) : formatUsage(usage);
+      return parsed.json
+        ? stringifyJson(usage)
+        : formatUsage(usage, { title: packageTitle() });
     }
 
     if (parsed.command === "resets") {
@@ -201,23 +294,34 @@ const runParsed = (
       });
     }
 
-    const response = yield* client.consumeResetCredit(undefined, credit.id);
+    const response = yield* client.consumeResetCredit({ creditId: credit.id });
     return parsed.json
       ? stringifyJson(response)
       : formatConsumeResetResponse(response);
   });
 
+/**
+ * Parses argv and runs the requested CLI command.
+ *
+ * @param args - Arguments after the executable name.
+ */
 export const runCli = (
   args: readonly string[]
 ): Effect.Effect<string, CodexUsageError> =>
-  Effect.try({
-    catch: (cause) =>
-      cause instanceof CliError
-        ? cause
-        : new CliError({ exitCode: 2, message: String(cause) }),
-    try: () => parseArgs(args),
-  }).pipe(Effect.flatMap(runParsed));
+  parseArgs(args).pipe(Effect.flatMap(runParsed));
 
+/** Returns whether argv requests verbose unexpected-error output. */
+export const isVerboseCli = (args: readonly string[]): boolean =>
+  args.includes("--verbose") || args.includes("-v");
+
+/** Formats an unexpected CLI failure for stderr. */
+export const formatUnexpectedCliError = (
+  cause: Cause.Cause<unknown>,
+  args: readonly string[]
+): string =>
+  isVerboseCli(args) ? Cause.pretty(cause) : "An unexpected error occurred";
+
+/** Prints a tagged CLI or Codex error and returns the process exit code. */
 const printError = (error: CodexUsageError): number => {
   if (error._tag === "CodexHttpError") {
     console.error(`${error.message}: HTTP ${error.status} ${error.statusText}`);
@@ -225,17 +329,29 @@ const printError = (error: CodexUsageError): number => {
   }
 
   console.error(error.message);
-  return error._tag === "CliError" ? error.exitCode : 1;
+  if (error._tag === "CliError") {
+    return error.exitCode;
+  }
+
+  return error._tag === "CodexConfigError" ? 2 : 1;
 };
 
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  try {
-    const output = await Effect.runPromise(runCli(process.argv.slice(2)));
+  const cliArgs = process.argv.slice(2);
+  const exit = await Effect.runPromiseExit(runCli(cliArgs));
+  if (exit._tag === "Success") {
+    const output = exit.value;
     process.stdout.write(output);
-  } catch (error) {
-    process.exitCode = printError(error as CodexUsageError);
+  } else {
+    const failure = Cause.failureOption(exit.cause);
+    if (Option.isSome(failure)) {
+      process.exitCode = printError(failure.value);
+    } else {
+      console.error(formatUnexpectedCliError(exit.cause, cliArgs));
+      process.exitCode = 1;
+    }
   }
 }

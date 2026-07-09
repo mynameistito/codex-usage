@@ -1,8 +1,16 @@
-export { parseAuthTokens, readCodexAuth } from "@/auth.js";
-export { createCodexClient } from "@/client.js";
+/**
+ * Public package entry point for the Codex usage CLI library.
+ *
+ * Re-exports the Codex client, auth helpers, formatters, normalizers, types,
+ * and tagged errors used by the CLI and downstream consumers.
+ */
+export { parseAuthTokens, readCodexAuth } from "@/codex/auth.js";
+export { createCodexClient } from "@/codex/client.js";
+export type { CodexClient, ConsumeResetCreditOptions } from "@/codex/client.js";
 export {
   CliError,
   CodexAuthError,
+  CodexConfigError,
   CodexHttpError,
   CodexParseError,
 } from "@/errors/index.js";
@@ -11,6 +19,28 @@ export {
   formatConsumeResetResponse,
   formatResetCredits,
   formatUsage,
-} from "@/format.js";
-export { limitLabelForWindow, normalizeUsagePayload } from "@/normalize.js";
-export type * from "@/types.js";
+} from "@/usage/format.js";
+export {
+  limitLabelForWindow,
+  normalizeUsagePayload,
+} from "@/usage/normalize.js";
+export type {
+  AdditionalRateLimitDetails,
+  CodexAuthTokens,
+  CodexClientOptions,
+  CodexUsagePayload,
+  ConsumeResetCode,
+  ConsumeResetResponse,
+  CreditStatusDetails,
+  NormalizedRateLimit,
+  NormalizedRateLimitWindow,
+  NormalizedUsage,
+  RateLimitReachedType,
+  RateLimitResetCredit,
+  RateLimitResetCreditsPayload,
+  RateLimitResetCreditsSummary,
+  RateLimitStatusDetails,
+  RateLimitWindowSnapshot,
+  SpendControlLimitDetails,
+  SpendControlStatusDetails,
+} from "@/codex/types.js";

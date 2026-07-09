@@ -1,15 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 
-import { createCodexClient } from "@/client.js";
+import { createCodexClient } from "@/codex/client.js";
+import type { CodexClient } from "@/codex/client.js";
+import type { CodexClientOptions } from "@/codex/types.js";
+import type { CodexConfigError } from "@/errors/config-error.js";
 
 const tokens = {
-  accessToken: "access-token",
+  accessToken: Redacted.make("access-token"),
   accountId: "account-id",
 };
 
 const originalFetch = globalThis.fetch;
+
+const defaultOptions: CodexClientOptions = { baseUrl: "https://example.com" };
+
+const withClient = <A, E>(
+  run: (client: CodexClient) => Effect.Effect<A, E>,
+  options: CodexClientOptions = defaultOptions
+): Effect.Effect<A, E | CodexConfigError> =>
+  createCodexClient(tokens, options).pipe(Effect.flatMap(run));
 
 const mockResponse = (body: unknown): void => {
   globalThis.fetch = (() =>
@@ -25,7 +36,7 @@ describe("createCodexClient", () => {
     mockResponse([]);
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, { baseUrl: "https://example.com" }).fetchUsage()
+      withClient((client) => client.fetchUsage())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -36,28 +47,85 @@ describe("createCodexClient", () => {
     }
   });
 
-  test("rejects insecure remote base URLs", () => {
-    expect(() =>
+  test("rejects insecure remote base URLs", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "http://example.com" })
-    ).toThrow("Base URL must use HTTPS unless it is localhost");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must use HTTPS unless it is localhost"
+      );
+    }
   });
 
-  test("rejects base URLs that include credentials", () => {
-    expect(() =>
+  test("rejects unsupported loopback URL schemes", async () => {
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, { baseUrl: "ftp://localhost" })
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must use HTTP or HTTPS"
+      );
+    }
+  });
+
+  test("allows HTTP loopback base URLs", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
+      calls.push(String(input));
+      return Promise.resolve(Response.json({ plan_type: "pro" }));
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) => client.fetchUsage(), {
+        baseUrl: "http://localhost:8787",
+      })
+    );
+
+    expect(calls).toEqual(["http://localhost:8787/wham/usage"]);
+  });
+
+  test("rejects base URLs that include credentials", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://user:pass@example.com" })
-    ).toThrow("Base URL must not include credentials");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must not include credentials"
+      );
+    }
   });
 
-  test("rejects base URLs that include query strings", () => {
-    expect(() =>
+  test("rejects base URLs that include query strings", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://example.com?query=value" })
-    ).toThrow("Base URL must not include a query string or fragment");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must not include a query string or fragment"
+      );
+    }
   });
 
-  test("rejects base URLs that include fragments", () => {
-    expect(() =>
+  test("rejects base URLs that include fragments", async () => {
+    const exit = await Effect.runPromiseExit(
       createCodexClient(tokens, { baseUrl: "https://example.com#fragment" })
-    ).toThrow("Base URL must not include a query string or fragment");
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "Base URL must not include a query string or fragment"
+      );
+    }
   });
 
   test("only appends backend-api for exact ChatGPT hostnames", async () => {
@@ -68,9 +136,9 @@ describe("createCodexClient", () => {
     }) as typeof fetch;
 
     await Effect.runPromise(
-      createCodexClient(tokens, {
+      withClient((client) => client.fetchUsage(), {
         baseUrl: "https://chatgpt.com.evil.test",
-      }).fetchUsage()
+      })
     );
 
     expect(calls).toEqual(["https://chatgpt.com.evil.test/wham/usage"]);
@@ -84,10 +152,40 @@ describe("createCodexClient", () => {
     }) as typeof fetch;
 
     await Effect.runPromise(
-      createCodexClient(tokens, { baseUrl: "https://chatgpt.com" }).fetchUsage()
+      withClient((client) => client.fetchUsage(), {
+        baseUrl: "https://chatgpt.com",
+      })
     );
 
     expect(calls).toEqual(["https://chatgpt.com/backend-api/wham/usage"]);
+  });
+
+  test("rejects unexpected ChatGPT base URL paths", async () => {
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, { baseUrl: "https://chatgpt.com/foo" })
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "ChatGPT base URL path must be /backend-api or omitted"
+      );
+    }
+  });
+
+  test("rejects ChatGPT paths that only prefix backend-api", async () => {
+    const exit = await Effect.runPromiseExit(
+      createCodexClient(tokens, {
+        baseUrl: "https://chatgpt.com/backend-api-v2",
+      })
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain(
+        "ChatGPT base URL path must be /backend-api or omitted"
+      );
+    }
   });
 
   test("rejects malformed nested rate limit windows", async () => {
@@ -99,7 +197,7 @@ describe("createCodexClient", () => {
     });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, { baseUrl: "https://example.com" }).fetchUsage()
+      withClient((client) => client.fetchUsage())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -114,9 +212,7 @@ describe("createCodexClient", () => {
     mockResponse([]);
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -131,9 +227,7 @@ describe("createCodexClient", () => {
     mockResponse({ available_count: "not-a-number" });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -148,9 +242,7 @@ describe("createCodexClient", () => {
     mockResponse({ credits: [null] });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -165,9 +257,7 @@ describe("createCodexClient", () => {
     mockResponse({ credits: [{ expires_at: 123 }] });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).fetchResetCredits()
+      withClient((client) => client.fetchResetCredits())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -182,9 +272,7 @@ describe("createCodexClient", () => {
     mockResponse([]);
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).consumeResetCredit()
+      withClient((client) => client.consumeResetCredit())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -199,9 +287,7 @@ describe("createCodexClient", () => {
     mockResponse({ code: "reset", windows_reset: "not-a-number" });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).consumeResetCredit()
+      withClient((client) => client.consumeResetCredit())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -228,11 +314,7 @@ describe("createCodexClient", () => {
 
     const responses = await Promise.all(
       codes.map(() =>
-        Effect.runPromise(
-          createCodexClient(tokens, {
-            baseUrl: "https://example.com",
-          }).consumeResetCredit()
-        )
+        Effect.runPromise(withClient((client) => client.consumeResetCredit()))
       )
     );
 
@@ -245,9 +327,7 @@ describe("createCodexClient", () => {
     mockResponse({ code: "unexpected", windows_reset: 1 });
 
     const exit = await Effect.runPromiseExit(
-      createCodexClient(tokens, {
-        baseUrl: "https://example.com",
-      }).consumeResetCredit()
+      withClient((client) => client.consumeResetCredit())
     );
 
     expect(exit._tag).toBe("Failure");
@@ -256,5 +336,100 @@ describe("createCodexClient", () => {
         "Consume reset response had an invalid shape"
       );
     }
+  });
+
+  test("rejects legacy positional string arguments", async () => {
+    const exit = await Effect.runPromiseExit(
+      withClient((client) =>
+        client.consumeResetCredit(
+          "redeem-request-id" as unknown as Parameters<
+            CodexClient["consumeResetCredit"]
+          >[0]
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(exit.cause.toString()).toContain("expects an options object");
+    }
+  });
+
+  test("treats null options as defaults", async () => {
+    const bodies: unknown[] = [];
+    globalThis.fetch = ((
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      bodies.push(init?.body);
+      return Promise.resolve(
+        Response.json({ code: "reset", windows_reset: 1 })
+      );
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) => client.consumeResetCredit(null))
+    );
+
+    expect(JSON.parse(String(bodies[0]))).toEqual({
+      redeem_request_id: expect.any(String),
+    });
+  });
+
+  test("reuses redeem_request_id when the consume effect is retried", async () => {
+    const bodies: unknown[] = [];
+    let attempt = 0;
+    globalThis.fetch = ((
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      bodies.push(init?.body);
+      attempt += 1;
+      if (attempt === 1) {
+        return Promise.reject(new DOMException("timeout", "TimeoutError"));
+      }
+      return Promise.resolve(
+        Response.json({ code: "reset", windows_reset: 1 })
+      );
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) => {
+        const consume = client.consumeResetCredit();
+        return consume.pipe(Effect.retry({ times: 1 }));
+      })
+    );
+
+    expect(bodies).toHaveLength(2);
+    const first = JSON.parse(String(bodies[0]));
+    const second = JSON.parse(String(bodies[1]));
+    expect(first.redeem_request_id).toBe(second.redeem_request_id);
+  });
+
+  test("sends creditId when provided via options object", async () => {
+    const bodies: unknown[] = [];
+    globalThis.fetch = ((
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      bodies.push(init?.body);
+      return Promise.resolve(
+        Response.json({ code: "reset", windows_reset: 1 })
+      );
+    }) as typeof fetch;
+
+    await Effect.runPromise(
+      withClient((client) =>
+        client.consumeResetCredit({
+          creditId: "RateLimitResetCredit_test",
+          redeemRequestId: "redeem-request-id",
+        })
+      )
+    );
+
+    expect(JSON.parse(String(bodies[0]))).toEqual({
+      credit_id: "RateLimitResetCredit_test",
+      redeem_request_id: "redeem-request-id",
+    });
   });
 });
