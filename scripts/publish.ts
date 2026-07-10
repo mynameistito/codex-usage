@@ -50,7 +50,7 @@ const PUBLISHED_VERSION_CONFLICT = "Cannot stage previously published version";
 
 const releaseCommands = ["github", "npm"] as const;
 
-/** Parses the release subcommand passed to `node --run publish`. */
+/** Parses the release subcommand passed to `node --run release`. */
 export const parseReleaseCommand = (
   command: string | undefined
 ): ReleaseCommand => {
@@ -58,7 +58,7 @@ export const parseReleaseCommand = (
     return command as ReleaseCommand;
   }
 
-  throw new ReleaseError("Usage: node --run publish -- <npm | github>");
+  throw new ReleaseError("Usage: node --run release -- <npm | github>");
 };
 
 /** Reads and parses package metadata needed by release operations. */
@@ -191,6 +191,13 @@ export const runNpmRelease = async (
     return;
   }
 
+  const publishedOutput = `${published.stdout}${published.stderr}`;
+  if (!/E404|404 Not Found|is not in this registry/iu.test(publishedOutput)) {
+    throw new ReleaseError(
+      `npm view failed with ${published.exitCode}: ${publishedOutput.trim()}`
+    );
+  }
+
   const stagedList = await runner("npm", [
     "stage",
     "list",
@@ -198,24 +205,20 @@ export const runNpmRelease = async (
     "--json",
   ]);
 
-  try {
-    if (hasStagedVersion(stagedList.stdout, releasePackage.version)) {
-      console.log(`${spec} is already staged for approval`);
-      writeGithubOutputs({ ...baseOutputs, staged: "true" });
-      return;
-    }
-  } catch {
-    // Non-JSON output means the version is not provably staged; publish decides.
+  if (stagedList.exitCode !== 0) {
+    const stagedOutput = `${stagedList.stdout}${stagedList.stderr}`;
+    throw new ReleaseError(
+      `npm stage list failed with ${stagedList.exitCode}: ${stagedOutput.trim()}`
+    );
   }
 
-  const stagePublish = await runner("npm", [
-    "stage",
-    "publish",
-    ".",
-    "--access",
-    "public",
-    "--provenance",
-  ]);
+  if (hasStagedVersion(stagedList.stdout, releasePackage.version)) {
+    console.log(`${spec} is already staged for approval`);
+    writeGithubOutputs({ ...baseOutputs, staged: "true" });
+    return;
+  }
+
+  const stagePublish = await runner("npm", ["stage", "publish", "."]);
   const publishOutput = `${stagePublish.stdout}${stagePublish.stderr}`;
 
   process.stdout.write(publishOutput);
@@ -237,9 +240,14 @@ export const runNpmRelease = async (
 
 /** Extracts release notes for `version` from a Changesets changelog. */
 export const extractReleaseNotes = (changelog: string, version: string) => {
-  const heading = `## ${version}`;
-  const start = changelog.indexOf(heading);
-  const bodyStart = start === -1 ? -1 : changelog.indexOf("\n", start) + 1;
+  const escapedVersion = version.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const heading = new RegExp(`^## ${escapedVersion}[ \\t]*$`, "mu");
+  const match = heading.exec(changelog);
+  const newlineStart = match ? match.index + match[0].length : -1;
+  const bodyStart =
+    newlineStart === -1
+      ? -1
+      : newlineStart + (changelog.startsWith("\r\n", newlineStart) ? 2 : 1);
   const nextHeading =
     bodyStart === -1 ? -1 : changelog.indexOf("\n## ", bodyStart);
 
