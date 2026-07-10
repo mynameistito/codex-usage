@@ -147,13 +147,20 @@ const parseChangesetType = (type: string | undefined): ChangesetType => {
  *
  * @param changesetDir - Absolute path to the `.changeset` directory.
  */
-const createChangesetFilename = (changesetDir: string) => {
+const createChangesetFile = (changesetDir: string, content: string) => {
+  mkdirSync(changesetDir, { recursive: true });
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const id = randomBytes(4).toString("hex");
     const filename = path.join(changesetDir, `${id}.md`);
 
-    if (!existsSync(filename)) {
+    try {
+      writeFileSync(filename, content, { flag: "wx" });
       return filename;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
     }
   }
 
@@ -186,9 +193,6 @@ const packageName = getPackageName(packageJson);
 assertChangesetsCliInstalled(packageJson, projectRoot);
 
 const changesetDir = path.join(projectRoot, ".changeset");
-const filename = createChangesetFilename(changesetDir);
-const relativeFilename = path.relative(projectRoot, filename);
-
 const content = `---
 "${packageName}": ${changesetType}
 ---
@@ -196,8 +200,8 @@ const content = `---
 ${summary.trim()}
 `;
 
-mkdirSync(changesetDir, { recursive: true });
-writeFileSync(filename, content);
+const filename = createChangesetFile(changesetDir, content);
+const relativeFilename = path.relative(projectRoot, filename);
 console.log(`✓ Created changeset: ${relativeFilename}`);
 console.log(`  Package: ${packageName}`);
 console.log(`  Type: ${changesetType}`);

@@ -32,7 +32,7 @@
     "fix": "ultracite fix",
     "knip": "knip",
     "prepare": "lefthook install",
-    "publish": "bun run ./scripts/publish.ts",
+    "release": "bun run ./scripts/publish.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
