@@ -40,11 +40,10 @@ describe("release helpers", () => {
     expect(calls).toHaveLength(1);
   });
 
-  test("checks stage-list status and uses supported stage-publish args", async () => {
+  test("stages directly with trusted publishing", async () => {
     const calls: string[][] = [];
     const responses = [
       result(1, "", "npm error code E404"),
-      result(0, "[]"),
       result(0, "staged"),
     ];
 
@@ -58,6 +57,9 @@ describe("release helpers", () => {
       { name: "example", version: "1.0.0" }
     );
 
-    expect(calls[2]).toEqual(["npm", "stage", "publish", "."]);
+    expect(calls).toEqual([
+      ["npm", "view", "example@1.0.0", "version"],
+      ["npm", "stage", "publish", "."],
+    ]);
   });
 });
