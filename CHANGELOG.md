@@ -1,5 +1,11 @@
 # @mynameistito/codex-usage
 
+## 1.1.2
+
+### Patch Changes
+
+- b5099d5: Refresh development dependencies and stabilize CLI integration tests.
+
 ## 1.1.1
 
 ### Patch Changes
