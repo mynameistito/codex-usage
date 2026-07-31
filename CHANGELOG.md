@@ -1,5 +1,11 @@
 # @mynameistito/codex-usage
 
+## 1.1.3
+
+### Patch Changes
+
+- ca1317c: Fix npm release staging with trusted publishing by skipping the unsupported staged-package listing request.
+
 ## 1.1.2
 
 ### Patch Changes
