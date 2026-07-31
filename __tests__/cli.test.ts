@@ -179,7 +179,7 @@ describe("parseArgs", () => {
         available_count: 3,
         credits: [
           {
-            expires_at: "2026-08-01T00:00:00Z",
+            expires_at: "2099-08-01T00:00:00Z",
             id: "RateLimitResetCredit_later",
             status: "available",
           },
@@ -189,7 +189,7 @@ describe("parseArgs", () => {
             status: "available",
           },
           {
-            expires_at: "2026-07-10T00:00:00Z",
+            expires_at: "2099-07-10T00:00:00Z",
             id: "RateLimitResetCredit_soonest",
             status: "available",
           },
