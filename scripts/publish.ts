@@ -131,51 +131,6 @@ export const runCommand: CommandRunner = async (command, args) => {
   return { exitCode, stderr, stdout };
 };
 
-const isStagedEntryForVersion = (entry: unknown, version: string) => {
-  if (typeof entry === "string") {
-    return entry === version || entry.endsWith(`@${version}`);
-  }
-
-  if (!entry || typeof entry !== "object") {
-    return false;
-  }
-
-  const record = entry as Record<string, unknown>;
-  const packageRecord = record["package"];
-
-  return (
-    record["version"] === version ||
-    (Boolean(packageRecord) &&
-      typeof packageRecord === "object" &&
-      (packageRecord as Record<string, unknown>)["version"] === version)
-  );
-};
-
-/** Returns whether npm staged-version output contains the package version. */
-export const hasStagedVersion = (input: string, version: string) => {
-  const trimmed = input.trim();
-
-  if (!trimmed) {
-    return false;
-  }
-
-  const parsed = JSON.parse(trimmed) as unknown;
-
-  if (!parsed || typeof parsed !== "object") {
-    return false;
-  }
-
-  if ("error" in parsed) {
-    return false;
-  }
-
-  const staged = Array.isArray(parsed)
-    ? parsed
-    : Object.values(parsed as Record<string, unknown>);
-
-  return staged.some((entry) => isStagedEntryForVersion(entry, version));
-};
-
 /** Stages the package with npm or reports that it is already released. */
 export const runNpmRelease = async (
   runner: CommandRunner = runCommand,
@@ -196,26 +151,6 @@ export const runNpmRelease = async (
     throw new ReleaseError(
       `npm view failed with ${published.exitCode}: ${publishedOutput.trim()}`
     );
-  }
-
-  const stagedList = await runner("npm", [
-    "stage",
-    "list",
-    releasePackage.name,
-    "--json",
-  ]);
-
-  if (stagedList.exitCode !== 0) {
-    const stagedOutput = `${stagedList.stdout}${stagedList.stderr}`;
-    throw new ReleaseError(
-      `npm stage list failed with ${stagedList.exitCode}: ${stagedOutput.trim()}`
-    );
-  }
-
-  if (hasStagedVersion(stagedList.stdout, releasePackage.version)) {
-    console.log(`${spec} is already staged for approval`);
-    writeGithubOutputs({ ...baseOutputs, staged: "true" });
-    return;
   }
 
   const stagePublish = await runner("npm", ["stage", "publish", "."]);
