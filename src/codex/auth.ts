@@ -2,18 +2,27 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { Effect, Redacted } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 
-import type { CodexAuthTokens } from "@/codex/types.js";
+import type { CodexAuthTokens, JsonValue } from "@/codex/types.js";
 import { CodexAuthError } from "@/errors/index.js";
 
 /** Returns the default Codex auth file path under the user home directory. */
 const defaultCodexAuthPath = (): string =>
   path.join(homedir(), ".codex", "auth.json");
 
+interface JsonObject {
+  readonly [key: string]: JsonValue;
+}
+
 /** Returns whether `value` is a plain object record. */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const isRecord = (value: JsonValue): value is JsonObject =>
+  value !== null &&
+  !Array.isArray(value) &&
+  Schema.is(Schema.Struct({}))(value);
+
+const isNonEmptyString = (value: JsonValue): value is string =>
+  Schema.is(Schema.String)(value) && value.length > 0;
 
 /**
  * Parses a decoded `auth.json` object into redacted Codex API credentials.
@@ -21,26 +30,26 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * @param value - Parsed JSON value from a Codex auth file.
  */
 export const parseAuthTokens = (
-  value: unknown
+  value: JsonValue
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>
   Effect.gen(function* parseAuthTokensEffect() {
-    const tokens = isRecord(value) ? value["tokens"] : undefined;
+    const tokens = isRecord(value) ? (value["tokens"] ?? null) : null;
     if (!isRecord(tokens)) {
       return yield* new CodexAuthError({
         message: "Missing tokens object in .codex/auth.json",
       });
     }
 
-    const accessToken = tokens["access_token"];
-    const accountId = tokens["account_id"];
+    const accessToken = tokens["access_token"] ?? null;
+    const accountId = tokens["account_id"] ?? null;
 
-    if (typeof accessToken !== "string" || accessToken.length === 0) {
+    if (!isNonEmptyString(accessToken)) {
       return yield* new CodexAuthError({
         message: "Missing tokens.access_token in .codex/auth.json",
       });
     }
 
-    if (typeof accountId !== "string" || accountId.length === 0) {
+    if (!isNonEmptyString(accountId)) {
       return yield* new CodexAuthError({
         message: "Missing tokens.account_id in .codex/auth.json",
       });
@@ -73,7 +82,10 @@ export const readCodexAuth = (
           cause,
           message: `Could not parse Codex auth file at ${authPath}`,
         }),
-      try: () => JSON.parse(raw) as unknown,
+      try: () => {
+        const parsedValue: JsonValue = JSON.parse(raw);
+        return parsedValue;
+      },
     });
 
     return yield* parseAuthTokens(parsed);

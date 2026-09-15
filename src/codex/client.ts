@@ -13,6 +13,7 @@ import type {
   ConsumeResetResponse,
   NormalizedUsage,
   RateLimitResetCreditsPayload,
+  JsonValue,
 } from "@/codex/types.js";
 import {
   CodexConfigError,
@@ -41,7 +42,7 @@ export interface ConsumeResetCreditOptions {
 
 /** Returns whether `value` is a plain consume-reset options object. */
 const isConsumeResetCreditOptions = (
-  value: unknown
+  value: ConsumeResetCreditOptions | null
 ): value is ConsumeResetCreditOptions =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -160,7 +161,7 @@ const normalizeBaseUrl = (
 const jsonHeaders = (
   tokens: CodexAuthTokens,
   userAgent: string
-): Record<string, string> => ({
+): HeadersInit => ({
   Authorization: `Bearer ${Redacted.value(tokens.accessToken)}`,
   "ChatGPT-Account-Id": tokens.accountId,
   "Content-Type": "application/json",
@@ -171,7 +172,7 @@ const jsonHeaders = (
 const getHeaders = (
   tokens: CodexAuthTokens,
   userAgent: string
-): Record<string, string> => ({
+): HeadersInit => ({
   Authorization: `Bearer ${Redacted.value(tokens.accessToken)}`,
   "ChatGPT-Account-Id": tokens.accountId,
   "User-Agent": userAgent,
@@ -186,7 +187,7 @@ const getHeaders = (
 const requestJson = (
   url: string,
   init: RequestInit
-): Effect.Effect<unknown, CodexHttpError | CodexParseError> =>
+): Effect.Effect<JsonValue, CodexHttpError | CodexParseError> =>
   Effect.gen(function* requestJsonEffect() {
     const response = yield* Effect.tryPromise({
       catch: (cause) =>
@@ -236,7 +237,10 @@ const requestJson = (
           message: `Response was not valid JSON: ${url}`,
           value: body,
         }),
-      try: () => JSON.parse(body) as unknown,
+      try: () => {
+        const parsedValue: JsonValue = JSON.parse(body);
+        return parsedValue;
+      },
     });
   });
 
@@ -288,13 +292,20 @@ export const createCodexClient = (
           return yield* requestJson(
             `${baseUrl}/wham/rate-limit-reset-credits/consume`,
             {
-              body: JSON.stringify({
-                ...(resolvedOptions.creditId
-                  ? { credit_id: resolvedOptions.creditId }
-                  : {}),
-                redeem_request_id:
-                  resolvedOptions.redeemRequestId ?? defaultRedeemRequestId,
-              }),
+              body: JSON.stringify(
+                resolvedOptions.creditId
+                  ? {
+                      credit_id: resolvedOptions.creditId,
+                      redeem_request_id:
+                        resolvedOptions.redeemRequestId ??
+                        defaultRedeemRequestId,
+                    }
+                  : {
+                      redeem_request_id:
+                        resolvedOptions.redeemRequestId ??
+                        defaultRedeemRequestId,
+                    }
+              ),
               headers: jsonHeaders(tokens, userAgent),
               method: "POST",
             }

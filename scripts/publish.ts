@@ -2,6 +2,8 @@
 
 import { appendFileSync, readFileSync } from "node:fs";
 
+import { Schema } from "effect";
+
 /** Package metadata required by the release workflow. */
 export interface ReleasePackage {
   readonly name: string;
@@ -48,14 +50,12 @@ const PACKAGE_JSON_PATH = "package.json";
 const CHANGELOG_PATH = "CHANGELOG.md";
 const PUBLISHED_VERSION_CONFLICT = "Cannot stage previously published version";
 
-const releaseCommands = ["github", "npm"] as const;
-
 /** Parses the release subcommand passed to `node --run release`. */
 export const parseReleaseCommand = (
   command: string | undefined
 ): ReleaseCommand => {
-  if (releaseCommands.includes(command as ReleaseCommand)) {
-    return command as ReleaseCommand;
+  if (command === "github" || command === "npm") {
+    return command;
   }
 
   throw new ReleaseError("Usage: node --run release -- <npm | github>");
@@ -65,20 +65,25 @@ export const parseReleaseCommand = (
 export const readReleasePackage = (
   packageJsonPath = PACKAGE_JSON_PATH
 ): ReleasePackage => {
-  const parsed = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as unknown;
+  // SAFETY: package.json is validated by the field checks below before use.
+  const parsed: unknown = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
-  if (!parsed || typeof parsed !== "object") {
+  if (!parsed || Array.isArray(parsed)) {
     throw new ReleaseError("package.json must contain an object");
   }
 
-  const packageJson = parsed as Record<string, unknown>;
+  // SAFETY: the preceding object check establishes the container invariant; fields are checked below.
+  const packageJson = parsed as {
+    readonly name?: unknown;
+    readonly version?: unknown;
+  };
   const { name, version } = packageJson;
 
-  if (typeof name !== "string" || !name.trim()) {
+  if (!Schema.is(Schema.String)(name) || !name.trim()) {
     throw new ReleaseError("package.json must include a non-empty name field");
   }
 
-  if (typeof version !== "string" || !version.trim()) {
+  if (!Schema.is(Schema.String)(version) || !version.trim()) {
     throw new ReleaseError(
       "package.json must include a non-empty version field"
     );
@@ -179,10 +184,11 @@ export const extractReleaseNotes = (changelog: string, version: string) => {
   const heading = new RegExp(`^## ${escapedVersion}[ \\t]*$`, "mu");
   const match = heading.exec(changelog);
   const newlineStart = match ? match.index + match[0].length : -1;
-  const bodyStart =
-    newlineStart === -1
-      ? -1
-      : newlineStart + (changelog.startsWith("\r\n", newlineStart) ? 2 : 1);
+  let bodyStart = -1;
+  if (newlineStart !== -1) {
+    const newlineLength = changelog.startsWith("\r\n", newlineStart) ? 2 : 1;
+    bodyStart = newlineStart + newlineLength;
+  }
   const nextHeading =
     bodyStart === -1 ? -1 : changelog.indexOf("\n## ", bodyStart);
 

@@ -24,7 +24,7 @@ const isPackageMetadata = (value: unknown): value is PackageMetadata => {
 
 /** Returns the published package name and version for CLI headings. */
 export const packageTitle = (): string => {
-  const metadata = requirePackageJson("../package.json") as unknown;
+  const metadata: unknown = requirePackageJson("../package.json");
   if (!isPackageMetadata(metadata)) {
     return "codex-usage";
   }

@@ -122,17 +122,11 @@ const normalizeLimit = (params: {
   readonly individualLimit: SpendControlLimitDetails | null;
   readonly rateLimitReachedType: string | null;
 }): NormalizedRateLimit => ({
-  allowed:
-    typeof params.details?.allowed === "boolean"
-      ? params.details.allowed
-      : null,
+  allowed: params.details?.allowed ?? null,
   credits: params.credits,
   id: params.id,
   individualLimit: params.individualLimit,
-  limitReached:
-    typeof params.details?.limit_reached === "boolean"
-      ? params.details.limit_reached
-      : null,
+  limitReached: params.details?.limit_reached ?? null,
   name: params.name ?? params.id,
   planType: params.planType,
   rateLimitReachedType: params.rateLimitReachedType,
