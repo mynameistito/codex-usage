@@ -4,7 +4,7 @@ import { Effect, Redacted } from "effect";
 
 import { createCodexClient } from "@/codex/client.js";
 import type { CodexClient } from "@/codex/client.js";
-import type { CodexClientOptions } from "@/codex/types.js";
+import type { CodexClientOptions, JsonValue } from "@/codex/types.js";
 import type { CodexConfigError } from "@/errors/config-error.js";
 
 const tokens = {
@@ -22,9 +22,12 @@ const withClient = <A, E>(
 ): Effect.Effect<A, E | CodexConfigError> =>
   createCodexClient(tokens, options).pipe(Effect.flatMap(run));
 
-const mockResponse = (body: unknown): void => {
-  globalThis.fetch = (() =>
-    Promise.resolve(Response.json(body))) as unknown as typeof fetch;
+const mockResponse = (body: JsonValue | readonly JsonValue[]): void => {
+  // SAFETY: this test double implements the global fetch contract for every call.
+  const fetchMock = Object.assign(() => Promise.resolve(Response.json(body)), {
+    preconnect: () => null,
+  });
+  globalThis.fetch = fetchMock;
 };
 
 describe("createCodexClient", () => {
@@ -75,10 +78,15 @@ describe("createCodexClient", () => {
 
   test("allows HTTP loopback base URLs", async () => {
     const calls: string[] = [];
-    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
-      calls.push(String(input));
-      return Promise.resolve(Response.json({ plan_type: "pro" }));
-    }) as typeof fetch;
+    // SAFETY: this test double implements the global fetch contract for every call.
+    const fetchMock = Object.assign(
+      (input: Parameters<typeof fetch>[0]) => {
+        calls.push(String(input));
+        return Promise.resolve(Response.json({ plan_type: "pro" }));
+      },
+      { preconnect: () => null }
+    );
+    globalThis.fetch = fetchMock;
 
     await Effect.runPromise(
       withClient((client) => client.fetchUsage(), {
@@ -130,6 +138,7 @@ describe("createCodexClient", () => {
 
   test("only appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
+    // SAFETY: this test double implements the global fetch contract for every call.
     globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
       calls.push(String(input));
       return Promise.resolve(Response.json({ plan_type: "pro" }));
@@ -146,6 +155,7 @@ describe("createCodexClient", () => {
 
   test("appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
+    // SAFETY: this test double implements the global fetch contract for every call.
     globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
       calls.push(String(input));
       return Promise.resolve(Response.json({ plan_type: "pro" }));
@@ -306,11 +316,16 @@ describe("createCodexClient", () => {
       "reset",
     ] as const;
     let nextCode = 0;
-    globalThis.fetch = (() => {
-      const code = codes[nextCode];
-      nextCode += 1;
-      return Promise.resolve(Response.json({ code, windows_reset: 1 }));
-    }) as unknown as typeof fetch;
+    // SAFETY: this test double implements the global fetch contract for every call.
+    const fetchMock = Object.assign(
+      () => {
+        const code = codes[nextCode];
+        nextCode += 1;
+        return Promise.resolve(Response.json({ code, windows_reset: 1 }));
+      },
+      { preconnect: () => null }
+    );
+    globalThis.fetch = fetchMock;
 
     const responses = await Promise.all(
       codes.map(() =>
@@ -342,7 +357,8 @@ describe("createCodexClient", () => {
     const exit = await Effect.runPromiseExit(
       withClient((client) =>
         client.consumeResetCredit(
-          "redeem-request-id" as unknown as Parameters<
+          // SAFETY: this intentionally passes a legacy string to test runtime rejection.
+          "redeem-request-id" as Parameters<
             CodexClient["consumeResetCredit"]
           >[0]
         )
@@ -357,6 +373,7 @@ describe("createCodexClient", () => {
 
   test("treats null options as defaults", async () => {
     const bodies: unknown[] = [];
+    // SAFETY: this test double implements the global fetch contract for every call.
     globalThis.fetch = ((
       _input: Parameters<typeof fetch>[0],
       init?: Parameters<typeof fetch>[1]
@@ -379,6 +396,7 @@ describe("createCodexClient", () => {
   test("reuses redeem_request_id when the consume effect is retried", async () => {
     const bodies: unknown[] = [];
     let attempt = 0;
+    // SAFETY: this test double implements the global fetch contract for every call.
     globalThis.fetch = ((
       _input: Parameters<typeof fetch>[0],
       init?: Parameters<typeof fetch>[1]
@@ -408,6 +426,7 @@ describe("createCodexClient", () => {
 
   test("sends creditId when provided via options object", async () => {
     const bodies: unknown[] = [];
+    // SAFETY: this test double implements the global fetch contract for every call.
     globalThis.fetch = ((
       _input: Parameters<typeof fetch>[0],
       init?: Parameters<typeof fetch>[1]

@@ -7,12 +7,11 @@ import path from "node:path";
 import { Cause, Effect } from "effect";
 
 import { formatUnexpectedCliError, parseArgs, runCli } from "@/cli.js";
+import type { JsonValue } from "@/codex/types.js";
 
 const requirePackageJson = createRequire(import.meta.url);
-const packageJson = requirePackageJson("../package.json") as {
-  readonly name: string;
-  readonly version: string;
-};
+const packageJson: { readonly name: string; readonly version: string } =
+  requirePackageJson("../package.json");
 
 const testBaseUrl = "https://example.test/backend-api";
 const originalFetch = globalThis.fetch;
@@ -43,9 +42,10 @@ const createAuthFile = async (): Promise<string> => {
   return authPath;
 };
 
-const mockFetch = (body: unknown | readonly unknown[]): FetchCall[] => {
+const mockFetch = (body: JsonValue | readonly JsonValue[]): FetchCall[] => {
   const calls: FetchCall[] = [];
   const bodies = Array.isArray(body) ? [...body] : [body];
+  // SAFETY: this test double implements the global fetch contract for every call.
   globalThis.fetch = ((
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1]
@@ -139,7 +139,7 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed = JSON.parse(output) as { readonly planType?: string };
+    const parsed: { readonly planType?: string } = JSON.parse(output);
 
     expect(parsed.planType).toBe("pro");
     expect(calls).toHaveLength(1);
@@ -164,7 +164,7 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed = JSON.parse(output) as { readonly available_count?: number };
+    const parsed: { readonly available_count?: number } = JSON.parse(output);
 
     expect(parsed.available_count).toBe(3);
     expect(calls).toHaveLength(1);
@@ -209,7 +209,7 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed = JSON.parse(output) as { readonly code?: string };
+    const parsed: { readonly code?: string } = JSON.parse(output);
 
     expect(parsed.code).toBe("reset");
     expect(calls).toHaveLength(2);

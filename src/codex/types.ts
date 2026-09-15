@@ -1,5 +1,14 @@
 import type { Redacted } from "effect/Redacted";
 
+/** JSON value accepted at external API and file boundaries. */
+export type JsonValue =
+  | { readonly [key: string]: JsonValue }
+  | readonly JsonValue[]
+  | string
+  | number
+  | boolean
+  | null;
+
 /** Redacted Codex API credentials read from `auth.json`. */
 export interface CodexAuthTokens {
   readonly accessToken: Redacted<string>;

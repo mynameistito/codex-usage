@@ -7,6 +7,7 @@ import type {
   CodexUsagePayload,
   ConsumeResetResponse,
   RateLimitResetCreditsPayload,
+  JsonValue,
 } from "@/codex/types.js";
 import { CodexParseError } from "@/errors/index.js";
 
@@ -127,37 +128,42 @@ const ConsumeResetResponseSchema = Schema.Struct({
 });
 
 /** Returns whether `value` is a non-null, non-array object. */
-const isObject = (value: unknown): value is object =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+interface JsonObject {
+  readonly [key: string]: JsonValue;
+}
+
+const isObject = (value: JsonValue): value is JsonObject =>
+  value !== null && !Array.isArray(value);
 
 /** Builds a tagged parse error for the rejected API payload. */
-const parseError = (message: string, value: unknown): CodexParseError =>
+const parseError = (message: string, value: JsonValue): CodexParseError =>
   new CodexParseError({ message, value });
 
 /** Maps a schema decode failure into a `CodexParseError`. */
-const invalidShapeError = (
-  invalidShapeMessage: string,
-  value: unknown
-): CodexParseError => parseError(invalidShapeMessage, value);
+const invalidPayloadError = (
+  invalidPayloadMessage: string,
+  value: JsonObject
+): CodexParseError => parseError(invalidPayloadMessage, value);
 
 /**
  * Decodes an API payload with `schema`, preserving Effect parse diagnostics on
  * shape mismatches while keeping dedicated messages for non-object inputs.
  */
 const parseSchema = <A, I>(params: {
-  readonly input: unknown;
-  readonly invalidShapeMessage: string;
+  readonly input: JsonValue;
+  readonly invalidPayloadMessage: string;
   readonly notObjectMessage: string;
   readonly schema: Schema.Schema<A, I, never>;
 }): Effect.Effect<A, CodexParseError> => {
-  if (!isObject(params.input)) {
-    return Effect.fail(parseError(params.notObjectMessage, params.input));
+  const { input } = params;
+  if (!isObject(input)) {
+    return Effect.fail(parseError(params.notObjectMessage, input));
   }
 
-  const decoded = Schema.decodeUnknownEither(params.schema)(params.input);
+  const decoded = Schema.decodeUnknownEither(params.schema)(input);
   if (decoded._tag === "Left") {
     return Effect.fail(
-      invalidShapeError(params.invalidShapeMessage, params.input)
+      invalidPayloadError(params.invalidPayloadMessage, input)
     );
   }
 
@@ -170,11 +176,11 @@ const parseSchema = <A, I>(params: {
  * @param input - Raw JSON value from the usage endpoint.
  */
 export const parseUsagePayload = (
-  input: unknown
+  input: JsonValue
 ): Effect.Effect<CodexUsagePayload, CodexParseError> =>
   parseSchema({
     input,
-    invalidShapeMessage: "Usage response had an invalid shape",
+    invalidPayloadMessage: "Usage response had an invalid shape",
     notObjectMessage: "Usage response was not an object",
     schema: CodexUsagePayloadSchema,
   });
@@ -185,11 +191,11 @@ export const parseUsagePayload = (
  * @param input - Raw JSON value from the reset-credits endpoint.
  */
 export const parseResetCreditsPayload = (
-  input: unknown
+  input: JsonValue
 ): Effect.Effect<RateLimitResetCreditsPayload, CodexParseError> =>
   parseSchema({
     input,
-    invalidShapeMessage: "Reset credits response had an invalid shape",
+    invalidPayloadMessage: "Reset credits response had an invalid shape",
     notObjectMessage: "Reset credits response was not an object",
     schema: RateLimitResetCreditsPayloadSchema,
   });
@@ -200,11 +206,11 @@ export const parseResetCreditsPayload = (
  * @param input - Raw JSON value from the consume-reset endpoint.
  */
 export const parseConsumeResetResponse = (
-  input: unknown
+  input: JsonValue
 ): Effect.Effect<ConsumeResetResponse, CodexParseError> =>
   parseSchema({
     input,
-    invalidShapeMessage: "Consume reset response had an invalid shape",
+    invalidPayloadMessage: "Consume reset response had an invalid shape",
     notObjectMessage: "Consume reset response was not an object",
     schema: ConsumeResetResponseSchema,
   });

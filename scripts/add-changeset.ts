@@ -15,13 +15,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
+import { Schema } from "effect";
+
 /** Subset of `package.json` fields read by this script. */
 interface PackageJson {
-  dependencies?: Record<string, unknown>;
-  devDependencies?: Record<string, unknown>;
-  name?: unknown;
-  optionalDependencies?: Record<string, unknown>;
-  peerDependencies?: Record<string, unknown>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  name?: string;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
 }
 
 /** Supported Changesets semver bump types. */
@@ -35,7 +37,7 @@ const changesetTypes = ["patch", "minor", "major"] as const;
 
 /** Returns whether `type` is a supported Changesets bump type. */
 const isChangesetType = (type: string | undefined): type is ChangesetType =>
-  changesetTypes.includes(type as ChangesetType);
+  type !== undefined && changesetTypes.some((value) => value === type);
 
 /**
  * Walks parent directories from `startDir` until a `package.json` is found.
@@ -68,7 +70,10 @@ const findProjectRoot = (startDir: string) => {
  */
 const readPackageJson = (packageJsonPath: string) => {
   try {
-    return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as PackageJson;
+    const packageJson: PackageJson = JSON.parse(
+      readFileSync(packageJsonPath, "utf-8")
+    );
+    return packageJson;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`Failed to read package.json: ${message}`);
@@ -82,7 +87,7 @@ const readPackageJson = (packageJsonPath: string) => {
  * @param packageJson - Parsed package metadata.
  */
 const getPackageName = (packageJson: PackageJson) => {
-  if (typeof packageJson.name !== "string" || !packageJson.name.trim()) {
+  if (!Schema.is(Schema.String)(packageJson.name) || !packageJson.name.trim()) {
     console.error("package.json must include a non-empty name field");
     process.exit(1);
   }
@@ -158,6 +163,7 @@ const createChangesetFile = (changesetDir: string, content: string) => {
       writeFileSync(filename, content, { flag: "wx" });
       return filename;
     } catch (error) {
+      // SAFETY: filesystem failures expose `code` through Node's documented error shape.
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }

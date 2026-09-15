@@ -178,17 +178,24 @@ export const parseArgs = (
       index = step.nextIndex;
     }
 
-    return {
-      ...(state.authPath === undefined ? {} : { authPath: state.authPath }),
-      ...(state.baseUrl === undefined ? {} : { baseUrl: state.baseUrl }),
+    const parsed: MutableParsedArgs = {
       command: state.command,
       confirm: state.confirm,
       json: state.json,
     };
+
+    if (state.authPath !== undefined) {
+      parsed.authPath = state.authPath;
+    }
+    if (state.baseUrl !== undefined) {
+      parsed.baseUrl = state.baseUrl;
+    }
+
+    return parsed;
   });
 
 /** Serializes a value as pretty-printed JSON with a trailing newline. */
-const stringifyJson = (value: unknown): string =>
+const stringifyJson = <Value>(value: Value): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
 /**
