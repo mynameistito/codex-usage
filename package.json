@@ -1,6 +1,6 @@
 {
   "name": "@mynameistito/codex-usage",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "private": false,
   "description": "CLI for inspecting Codex usage windows and reset credits.",
   "repository": {

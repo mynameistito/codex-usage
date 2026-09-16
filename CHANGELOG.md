@@ -1,5 +1,12 @@
 # @mynameistito/codex-usage
 
+## 1.1.4
+
+### Patch Changes
+
+- 167049d: bump pkgs
+- 35fdf24: update ultracite plugins
+
 ## 1.1.3
 
 ### Patch Changes
