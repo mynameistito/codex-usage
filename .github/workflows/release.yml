@@ -18,6 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
       - name: Setup Bun
@@ -48,13 +49,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Detect version release
+        id: release
+        shell: bash
+        run: |
+          if git diff --unified=0 HEAD^1 HEAD -- package.json | grep -qE '^[+-][[:space:]]*"version":'; then
+            echo "version-changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version-changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish - npm
         id: publish
-        if: steps.changesets.outputs.hasChangesets == 'false'
+        if: steps.release.outputs.version-changed == 'true'
         run: node --run release -- npm
 
       - name: Publish - GitHub Release
-        if: steps.changesets.outputs.hasChangesets == 'false' && (steps.publish.outputs.published == 'true' || steps.publish.outputs.staged == 'true')
+        if: steps.release.outputs.version-changed == 'true' && (steps.publish.outputs.published == 'true' || steps.publish.outputs.staged == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node --run release -- github
