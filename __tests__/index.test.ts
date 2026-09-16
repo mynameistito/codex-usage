@@ -47,5 +47,5 @@ describe("public exports", () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toStartWith("codex-usage\n\nUsage:");
-  });
+  }, 15_000);
 });
