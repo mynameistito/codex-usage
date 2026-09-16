@@ -1,5 +1,12 @@
 # @mynameistito/codex-usage
 
+## 1.1.5
+
+### Patch Changes
+
+- bf16ce6: Publish versioned Changesets release commits after the release pull request is merged.
+- eb2f17e: Allow the built CLI integration test enough time to complete its build on CI runners.
+
 ## 1.1.4
 
 ### Patch Changes
