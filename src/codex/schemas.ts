@@ -1,7 +1,7 @@
 /**
  * Effect schemas and parsers for Codex API response payloads.
  */
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 
 import type {
   CodexUsagePayload,
@@ -92,11 +92,11 @@ const CodexUsagePayloadSchema = Schema.Struct({
 });
 
 /** Allowed lifecycle states for a banked reset credit. */
-const RateLimitResetCreditStatusSchema = Schema.Literal(
+const RateLimitResetCreditStatusSchema = Schema.Literals([
   "available",
   "expired",
-  "redeemed"
-);
+  "redeemed",
+]);
 
 /** Schema for a single banked reset credit. */
 const RateLimitResetCreditSchema = Schema.Struct({
@@ -118,12 +118,12 @@ const RateLimitResetCreditsPayloadSchema = Schema.Struct({
 
 /** Schema for the Codex consume-reset response payload. */
 const ConsumeResetResponseSchema = Schema.Struct({
-  code: Schema.Literal(
+  code: Schema.Literals([
     "already_redeemed",
     "no_credit",
     "nothing_to_reset",
-    "reset"
-  ),
+    "reset",
+  ]),
   windows_reset: Schema.Number,
 });
 
@@ -149,25 +149,25 @@ const invalidPayloadError = (
  * Decodes an API payload with `schema`, preserving Effect parse diagnostics on
  * shape mismatches while keeping dedicated messages for non-object inputs.
  */
-const parseSchema = <A, I>(params: {
+const parseSchema = <A>(params: {
   readonly input: JsonValue;
   readonly invalidPayloadMessage: string;
   readonly notObjectMessage: string;
-  readonly schema: Schema.Schema<A, I, never>;
+  readonly schema: Schema.ConstraintDecoder<A, never>;
 }): Effect.Effect<A, CodexParseError> => {
   const { input } = params;
   if (!isObject(input)) {
     return Effect.fail(parseError(params.notObjectMessage, input));
   }
 
-  const decoded = Schema.decodeUnknownEither(params.schema)(input);
-  if (decoded._tag === "Left") {
+  const decoded = Schema.decodeUnknownExit(params.schema)(input);
+  if (Exit.isFailure(decoded)) {
     return Effect.fail(
       invalidPayloadError(params.invalidPayloadMessage, input)
     );
   }
 
-  return Effect.succeed(decoded.right);
+  return Effect.succeed(decoded.value);
 };
 
 /**
