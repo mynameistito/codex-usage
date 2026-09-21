@@ -37,7 +37,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "effect": "^3.22.2"
+    "effect": "4.0.0-rc.117"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

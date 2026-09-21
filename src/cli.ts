@@ -353,7 +353,7 @@ if (
     const output = exit.value;
     process.stdout.write(output);
   } else {
-    const failure = Cause.failureOption(exit.cause);
+    const failure = Cause.findErrorOption(exit.cause);
     if (Option.isSome(failure)) {
       process.exitCode = printError(failure.value);
     } else {
