@@ -1,5 +1,11 @@
 # @mynameistito/codex-usage
 
+## 2.0.1
+
+### Patch Changes
+
+- 7014279: Update dependencies and GitHub Actions to their latest releases.
+
 ## 2.0.0
 
 ### Major Changes
