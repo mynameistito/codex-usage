@@ -16,12 +16,12 @@ codex-usage reset --confirm
 ## Library usage
 
 ```ts
-import { Effect } from "effect";
 import {
   createCodexClient,
   formatUsage,
   readCodexAuth,
 } from "@mynameistito/codex-usage";
+import { Effect } from "effect";
 
 const program = Effect.gen(function* () {
   const tokens = yield* readCodexAuth();

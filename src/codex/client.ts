@@ -141,7 +141,12 @@ const normalizeBaseUrl = (
     }
 
     if (CHATGPT_HOSTNAMES.has(parsed.hostname)) {
-      const pathname = parsed.pathname.replace(/\/+$/u, "") || "/";
+      const { pathname: parsedPathname } = parsed;
+      let pathname = parsedPathname;
+      while (pathname.endsWith("/")) {
+        pathname = pathname.slice(0, -1);
+      }
+      pathname ||= "/";
 
       if (pathname === "/") {
         return `${normalized}/backend-api`;
