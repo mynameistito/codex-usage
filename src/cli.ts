@@ -8,7 +8,12 @@ import { Cause, Effect, Option } from "effect";
 
 import { readCodexAuth } from "@/codex/auth.js";
 import { createCodexClient } from "@/codex/client.js";
-import type { RateLimitResetCredit } from "@/codex/types.js";
+import type {
+  ConsumeResetResponse,
+  NormalizedUsage,
+  RateLimitResetCredit,
+  RateLimitResetCreditsPayload,
+} from "@/codex/types.js";
 import { CliError } from "@/errors/index.js";
 import type { CodexUsageError } from "@/errors/index.js";
 import { packageTitle } from "@/package-metadata.js";
@@ -65,6 +70,7 @@ Options:
  * @param args - Full argv slice being parsed.
  * @param index - Index of the option token in `args`.
  * @param option - Option name used in error messages.
+ * @returns The option value or a CLI usage error.
  */
 const readOptionValue = (
   args: readonly string[],
@@ -73,7 +79,8 @@ const readOptionValue = (
 ): Effect.Effect<string, CliError> =>
   Effect.gen(function* readOptionValueEffect() {
     const value = args[index + 1];
-    if (!value || value.startsWith("-")) {
+
+    if (value === undefined || value.length === 0 || value.startsWith("-")) {
       return yield* new CliError({
         exitCode: 2,
         message: `Missing value for ${option}`,
@@ -104,6 +111,7 @@ interface ArgParseStep {
  * @param args - Full argv slice being parsed.
  * @param index - Index of the token to parse.
  * @param state - Mutable parse accumulator.
+ * @returns Parse progress or a CLI argument error.
  */
 const parseNextArg = (
   args: readonly string[],
@@ -115,16 +123,19 @@ const parseNextArg = (
 
     if (arg === "-h" || arg === "--help") {
       state.command = "help";
+
       return { nextIndex: index + 1, stop: true };
     }
 
     if (arg === "--json") {
       state.json = true;
+
       return { nextIndex: index + 1, stop: false };
     }
 
     if (arg === "-y" || arg === "--confirm" || arg === "--yes") {
       state.confirm = true;
+
       return { nextIndex: index + 1, stop: false };
     }
 
@@ -134,16 +145,19 @@ const parseNextArg = (
 
     if (arg === "--auth") {
       state.authPath = yield* readOptionValue(args, index, arg);
+
       return { nextIndex: index + 2, stop: false };
     }
 
     if (arg === "--base-url") {
       state.baseUrl = yield* readOptionValue(args, index, arg);
+
       return { nextIndex: index + 2, stop: false };
     }
 
     if (arg === "status" || arg === "resets" || arg === "reset") {
       state.command = arg;
+
       return { nextIndex: index + 1, stop: false };
     }
 
@@ -157,6 +171,7 @@ const parseNextArg = (
  * Parses CLI argv into a typed command description.
  *
  * @param args - Arguments after the executable name.
+ * @returns Parsed arguments or a CLI usage error.
  */
 export const parseArgs = (
   args: readonly string[]
@@ -169,8 +184,10 @@ export const parseArgs = (
     };
 
     let index = 0;
+
     while (index < args.length) {
       const step = yield* parseNextArg(args, index, state);
+
       if (step.stop) {
         break;
       }
@@ -187,6 +204,7 @@ export const parseArgs = (
     if (state.authPath !== undefined) {
       parsed.authPath = state.authPath;
     }
+
     if (state.baseUrl !== undefined) {
       parsed.baseUrl = state.baseUrl;
     }
@@ -194,23 +212,30 @@ export const parseArgs = (
     return parsed;
   });
 
-/** Serializes a value as pretty-printed JSON with a trailing newline. */
-const stringifyJson = <Value>(value: Value): string =>
-  `${JSON.stringify(value, null, 2)}\n`;
+/** Serializes a value as pretty-printed JSON with a trailing newline.
+ * @param value - Value to serialize.
+ * @returns Pretty-printed JSON with a trailing newline.
+ */
+const stringifyJson = (
+  value: NormalizedUsage | RateLimitResetCreditsPayload | ConsumeResetResponse
+): string => `${JSON.stringify(value, null, 2)}\n`;
 
 /**
  * Returns the expiry timestamp for credit selection, or `null` when invalid.
  *
  * Credits without an expiry are treated as never expiring.
+ * @param credit - Reset credit to inspect.
+ * @returns Expiry timestamp, positive infinity when absent, or `null` when invalid.
  */
 const timestampForCreditExpiry = (
   credit: RateLimitResetCredit
 ): number | null => {
-  if (!credit.expires_at) {
+  if (credit.expires_at === undefined || credit.expires_at.length === 0) {
     return Number.POSITIVE_INFINITY;
   }
 
   const timestamp = Date.parse(credit.expires_at);
+
   return Number.isNaN(timestamp) ? null : timestamp;
 };
 
@@ -219,17 +244,23 @@ const timestampForCreditExpiry = (
  *
  * @param credits - Reset credits returned by the Codex API.
  * @param now - Current timestamp used for expiry comparisons.
+ * @returns The soonest-expiring available credit, or `null`.
  */
 const pickSoonestExpiringCredit = (
   credits: readonly RateLimitResetCredit[],
   now = Date.now()
 ): RateLimitResetCredit | null => {
   const availableCredits = credits.filter((credit) => {
-    if (!credit.id || (credit.status ?? "available") !== "available") {
+    if (
+      credit.id === undefined ||
+      credit.id.length === 0 ||
+      (credit.status ?? "available") !== "available"
+    ) {
       return false;
     }
 
     const expiresAt = timestampForCreditExpiry(credit);
+
     return (
       expiresAt !== null &&
       (expiresAt === Number.POSITIVE_INFINITY || expiresAt > now)
@@ -249,7 +280,10 @@ const pickSoonestExpiringCredit = (
   );
 };
 
-/** Builds optional {@link CodexClientOptions} from parsed CLI args. */
+/** Builds optional {@link CodexClientOptions} from parsed CLI args.
+ * @param parsed - Parsed command-line arguments.
+ * @returns Client options containing configured overrides.
+ */
 const clientOptionsForArgs = (parsed: ParsedArgs) =>
   parsed.baseUrl === undefined ? {} : { baseUrl: parsed.baseUrl };
 
@@ -257,6 +291,7 @@ const clientOptionsForArgs = (parsed: ParsedArgs) =>
  * Executes a parsed CLI command and returns the output to print.
  *
  * @param parsed - Parsed CLI arguments.
+ * @returns Command output or a typed CLI/API error.
  */
 const runParsed = (
   parsed: ParsedArgs
@@ -275,6 +310,7 @@ const runParsed = (
     }
 
     const tokens = yield* readCodexAuth(parsed.authPath);
+
     const client = yield* createCodexClient(
       tokens,
       clientOptionsForArgs(parsed)
@@ -282,6 +318,7 @@ const runParsed = (
 
     if (parsed.command === "status") {
       const usage = yield* client.fetchUsage();
+
       return parsed.json
         ? stringifyJson(usage)
         : formatUsage(usage, { title: packageTitle() });
@@ -289,12 +326,14 @@ const runParsed = (
 
     if (parsed.command === "resets") {
       const credits = yield* client.fetchResetCredits();
+
       return parsed.json ? stringifyJson(credits) : formatResetCredits(credits);
     }
 
     const credits = yield* client.fetchResetCredits();
     const credit = pickSoonestExpiringCredit(credits.credits ?? []);
-    if (!credit?.id) {
+
+    if (credit === null || credit.id === undefined || credit.id.length === 0) {
       return yield* new CliError({
         exitCode: 1,
         message: "No available reset credits to redeem.",
@@ -302,6 +341,7 @@ const runParsed = (
     }
 
     const response = yield* client.consumeResetCredit({ creditId: credit.id });
+
     return parsed.json
       ? stringifyJson(response)
       : formatConsumeResetResponse(response);
@@ -311,31 +351,44 @@ const runParsed = (
  * Parses argv and runs the requested CLI command.
  *
  * @param args - Arguments after the executable name.
+ * @returns Command output or a typed CLI/API error.
  */
 export const runCli = (
   args: readonly string[]
 ): Effect.Effect<string, CodexUsageError> =>
   parseArgs(args).pipe(Effect.flatMap(runParsed));
 
-/** Returns whether argv requests verbose unexpected-error output. */
+/** Returns whether argv requests verbose unexpected-error output.
+ * @param args - Command-line arguments.
+ * @returns Whether verbose output was requested.
+ */
 export const isVerboseCli = (args: readonly string[]): boolean =>
   args.includes("--verbose") || args.includes("-v");
 
-/** Formats an unexpected CLI failure for stderr. */
+/** Formats an unexpected CLI failure for stderr.
+ * @param cause - Unexpected failure cause.
+ * @param args - Command-line arguments.
+ * @returns Concise or verbose error text.
+ */
 export const formatUnexpectedCliError = (
   cause: Cause.Cause<unknown>,
   args: readonly string[]
 ): string =>
   isVerboseCli(args) ? Cause.pretty(cause) : "An unexpected error occurred";
 
-/** Prints a tagged CLI or Codex error and returns the process exit code. */
+/** Prints a tagged CLI or Codex error and returns the process exit code.
+ * @param error - Typed CLI/API error.
+ * @returns Appropriate process exit code.
+ */
 const printError = (error: CodexUsageError): number => {
   if (error._tag === "CodexHttpError") {
     console.error(`${error.message}: HTTP ${error.status} ${error.statusText}`);
+
     return 1;
   }
 
   console.error(error.message);
+
   if (error._tag === "CliError") {
     return error.exitCode;
   }
@@ -344,16 +397,18 @@ const printError = (error: CodexUsageError): number => {
 };
 
 if (
-  process.argv[1] &&
+  process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const cliArgs = process.argv.slice(2);
   const exit = await Effect.runPromiseExit(runCli(cliArgs));
+
   if (exit._tag === "Success") {
     const output = exit.value;
     process.stdout.write(output);
   } else {
     const failure = Cause.findErrorOption(exit.cause);
+
     if (Option.isSome(failure)) {
       process.exitCode = printError(failure.value);
     } else {

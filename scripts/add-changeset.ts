@@ -18,13 +18,21 @@ import path from "node:path";
 import { Schema } from "effect";
 
 /** Subset of `package.json` fields read by this script. */
-interface PackageJson {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  name?: string;
-  optionalDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-}
+const PackageJsonSchema = Schema.Struct({
+  dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  devDependencies: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String)
+  ),
+  name: Schema.optionalKey(Schema.String),
+  optionalDependencies: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String)
+  ),
+  peerDependencies: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String)
+  ),
+});
+
+type PackageJson = typeof PackageJsonSchema.Type;
 
 /** Supported Changesets semver bump types. */
 type ChangesetType = "patch" | "minor" | "major";
@@ -35,7 +43,19 @@ const PACKAGE_JSON_FILENAME = "package.json";
 /** Allowed Changesets bump types. */
 const changesetTypes = ["patch", "minor", "major"] as const;
 
-/** Returns whether `type` is a supported Changesets bump type. */
+/** Prints a fatal CLI message and terminates the process.
+ * @param message - Error message to print.
+ * @returns Never returns because the process exits.
+ */
+const fail = (message: string): never => {
+  console.error(message);
+  process.exit(1);
+};
+
+/** Returns whether `type` is a supported Changesets bump type.
+ * @param type - Candidate Changesets bump type.
+ * @returns Whether the value is a supported bump type.
+ */
 const isChangesetType = (type: string | undefined): type is ChangesetType =>
   type !== undefined && changesetTypes.some((value) => value === type);
 
@@ -43,6 +63,7 @@ const isChangesetType = (type: string | undefined): type is ChangesetType =>
  * Walks parent directories from `startDir` until a `package.json` is found.
  *
  * @param startDir - Directory to begin searching from.
+ * @returns The first parent directory containing `package.json`.
  */
 const findProjectRoot = (startDir: string) => {
   let currentDir = startDir;
@@ -59,25 +80,24 @@ const findProjectRoot = (startDir: string) => {
     return currentDir;
   }
 
-  console.error(`Could not find ${PACKAGE_JSON_FILENAME} from script location`);
-  process.exit(1);
+  return fail(`Could not find ${PACKAGE_JSON_FILENAME} from script location`);
 };
 
 /**
  * Reads and parses `package.json` from `packageJsonPath`.
  *
  * @param packageJsonPath - Absolute path to `package.json`.
+ * @returns Parsed package metadata.
  */
 const readPackageJson = (packageJsonPath: string) => {
   try {
-    const packageJson: PackageJson = JSON.parse(
-      readFileSync(packageJsonPath, "utf-8")
+    return Schema.decodeUnknownSync(PackageJsonSchema)(
+      JSON.parse(readFileSync(packageJsonPath, "utf-8"))
     );
-    return packageJson;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`Failed to read package.json: ${message}`);
-    process.exit(1);
+
+    return fail(`Failed to read package.json: ${message}`);
   }
 };
 
@@ -85,22 +105,25 @@ const readPackageJson = (packageJsonPath: string) => {
  * Returns the package name from parsed `package.json` metadata.
  *
  * @param packageJson - Parsed package metadata.
+ * @returns Valid package name.
  */
 const getPackageName = (packageJson: PackageJson) => {
-  if (!Schema.is(Schema.String)(packageJson.name) || !packageJson.name.trim()) {
-    console.error("package.json must include a non-empty name field");
-    process.exit(1);
+  if (packageJson.name === undefined || packageJson.name.trim().length === 0) {
+    return fail("package.json must include a non-empty name field");
   }
 
   return packageJson.name;
 };
 
-/** Returns whether `@changesets/cli` is declared in `package.json`. */
+/** Returns whether `@changesets/cli` is declared in `package.json`.
+ * @param packageJson - Parsed package metadata.
+ * @returns Whether Changesets is declared in any dependency group.
+ */
 const hasChangesetsCliDependency = (packageJson: PackageJson) =>
   Boolean(
-    packageJson.dependencies?.["@changesets/cli"] ||
-    packageJson.devDependencies?.["@changesets/cli"] ||
-    packageJson.optionalDependencies?.["@changesets/cli"] ||
+    packageJson.dependencies?.["@changesets/cli"] ??
+    packageJson.devDependencies?.["@changesets/cli"] ??
+    packageJson.optionalDependencies?.["@changesets/cli"] ??
     packageJson.peerDependencies?.["@changesets/cli"]
   );
 
@@ -109,15 +132,16 @@ const hasChangesetsCliDependency = (packageJson: PackageJson) =>
  *
  * @param packageJson - Parsed package metadata.
  * @param projectRoot - Repository root directory.
+ * @returns Nothing when the dependency is installed; otherwise exits.
  */
 const assertChangesetsCliInstalled = (
   packageJson: PackageJson,
   projectRoot: string
-) => {
+): void => {
   if (!hasChangesetsCliDependency(packageJson)) {
-    console.error('Missing dependency: "@changesets/cli"');
-    console.error('Install it with: bun add -d "@changesets/cli"');
-    process.exit(1);
+    fail(
+      'Missing dependency: "@changesets/cli"\nInstall it with: bun add -d "@changesets/cli"'
+    );
   }
 
   const requireFromProject = createRequire(
@@ -127,9 +151,9 @@ const assertChangesetsCliInstalled = (
   try {
     requireFromProject.resolve("@changesets/cli/package.json");
   } catch {
-    console.error('Dependency "@changesets/cli" is declared but not installed');
-    console.error("Run: bun install");
-    process.exit(1);
+    fail(
+      'Dependency "@changesets/cli" is declared but not installed\nRun: bun install'
+    );
   }
 };
 
@@ -137,20 +161,22 @@ const assertChangesetsCliInstalled = (
  * Parses and validates the requested Changesets bump type.
  *
  * @param type - Raw CLI type argument.
+ * @returns Validated Changesets bump type.
  */
 const parseChangesetType = (type: string | undefined): ChangesetType => {
   if (isChangesetType(type)) {
     return type;
   }
 
-  console.error(`Invalid type: ${type}. Must be patch, minor, or major.`);
-  process.exit(1);
+  return fail(`Invalid type: ${type}. Must be patch, minor, or major.`);
 };
 
 /**
  * Generates a unique changeset filename inside `.changeset`.
  *
  * @param changesetDir - Absolute path to the `.changeset` directory.
+ * @param content - Changeset file contents.
+ * @returns Absolute path to the newly created changeset.
  */
 const createChangesetFile = (changesetDir: string, content: string) => {
   mkdirSync(changesetDir, { recursive: true });
@@ -161,17 +187,19 @@ const createChangesetFile = (changesetDir: string, content: string) => {
 
     try {
       writeFileSync(filename, content, { flag: "wx" });
+
       return filename;
     } catch (error) {
-      // SAFETY: filesystem failures expose `code` through Node's documented error shape.
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if (
+        !Schema.is(Schema.Struct({ code: Schema.String }))(error) ||
+        error.code !== "EEXIST"
+      ) {
         throw error;
       }
     }
   }
 
-  console.error("Could not generate a unique changeset filename");
-  process.exit(1);
+  return fail("Could not generate a unique changeset filename");
 };
 
 const args = process.argv.slice(2);
@@ -196,9 +224,11 @@ const projectRoot = findProjectRoot(import.meta.dirname);
 const packageJsonPath = path.join(projectRoot, PACKAGE_JSON_FILENAME);
 const packageJson = readPackageJson(packageJsonPath);
 const packageName = getPackageName(packageJson);
+
 assertChangesetsCliInstalled(packageJson, projectRoot);
 
 const changesetDir = path.join(projectRoot, ".changeset");
+
 const content = `---
 "${packageName}": ${changesetType}
 ---
@@ -208,7 +238,11 @@ ${summary.trim()}
 
 const filename = createChangesetFile(changesetDir, content);
 const relativeFilename = path.relative(projectRoot, filename);
+
 console.log(`✓ Created changeset: ${relativeFilename}`);
+
 console.log(`  Package: ${packageName}`);
+
 console.log(`  Type: ${changesetType}`);
+
 console.log(`  Summary: ${summary}`);

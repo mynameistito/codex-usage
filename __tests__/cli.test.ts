@@ -1,21 +1,30 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { formatUnexpectedCliError, parseArgs, runCli } from "@/cli.js";
 import type { JsonValue } from "@/codex/types.js";
-
-const requirePackageJson = createRequire(import.meta.url);
-const packageJson: { readonly name: string; readonly version: string } =
-  requirePackageJson("../package.json");
+import { packageTitle } from "@/package-metadata.js";
 
 const testBaseUrl = "https://example.test/backend-api";
 const originalFetch = globalThis.fetch;
 const tempDirs: string[] = [];
+
+const isJsonValueArray = (
+  value: JsonValue | readonly JsonValue[]
+): value is readonly JsonValue[] => Array.isArray(value);
+
+const failureText = <A, E>(exit: Exit.Exit<A, E>): string => {
+  if (Exit.isFailure(exit)) {
+    return exit.cause.toString();
+  }
+
+  throw new Error("Expected the operation to fail");
+};
 
 interface FetchCall {
   readonly body: unknown;
@@ -44,41 +53,54 @@ const createAuthFile = async (): Promise<string> => {
 
 const mockFetch = (body: JsonValue | readonly JsonValue[]): FetchCall[] => {
   const calls: FetchCall[] = [];
-  const bodies = Array.isArray(body) ? [...body] : [body];
-  // SAFETY: this test double implements the global fetch contract for every call.
-  globalThis.fetch = ((
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1]
-  ) => {
-    const request = input instanceof Request ? input : null;
-    calls.push({
-      body: init?.body,
-      headers: new Headers(init?.headers ?? request?.headers),
-      method: init?.method ?? request?.method ?? "GET",
-      url: request?.url ?? String(input),
-    });
+  const bodies = isJsonValueArray(body) ? [...body] : [body];
+  globalThis.fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: Parameters<typeof fetch>[1]) => {
+      let url: string;
+      let requestHeaders: Headers | undefined;
+      let requestMethod: string | undefined;
 
-    return Promise.resolve(Response.json(bodies.shift() ?? body));
-  }) as typeof fetch;
+      if (input instanceof Request) {
+        const { headers, method, url: requestUrl } = input;
+        url = requestUrl;
+        requestHeaders = headers;
+        requestMethod = method;
+      } else if (input instanceof URL) {
+        url = input.href;
+      } else {
+        url = input;
+      }
+
+      calls.push({
+        body: init?.body,
+        headers: new Headers(init?.headers ?? requestHeaders),
+        method: init?.method ?? requestMethod ?? "GET",
+        url,
+      });
+
+      return await Promise.resolve(Response.json(bodies.shift() ?? body));
+    },
+    { preconnect: () => null }
+  );
 
   return calls;
 };
 
-afterEach(async () => {
-  globalThis.fetch = originalFetch;
+describe(parseArgs, () => {
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
 
-  await Promise.all(
-    tempDirs
-      .splice(0)
-      .map((directory) => rm(directory, { force: true, recursive: true }))
-  );
-});
+    await Promise.all(
+      tempDirs.splice(0).map(async (directory) => {
+        await rm(directory, { force: true, recursive: true });
+      })
+    );
+  });
 
-describe("parseArgs", () => {
-  test("defaults to status", async () => {
+  it("defaults to status", async () => {
     const parsed = await Effect.runPromise(parseArgs([]));
 
-    expect(parsed).toEqual({
+    expect(parsed).toStrictEqual({
       command: "status",
       confirm: false,
       json: false,
@@ -87,16 +109,13 @@ describe("parseArgs", () => {
     expect(parsed.baseUrl).toBeUndefined();
   });
 
-  test("requires explicit confirmation for reset through runCli", async () => {
+  it("requires explicit confirmation for reset through runCli", async () => {
     const exit = await Effect.runPromiseExit(runCli(["reset"]));
 
-    expect(exit._tag).toBe("Failure");
-    if (exit._tag === "Failure") {
-      expect(exit.cause.toString()).toContain("without --confirm");
-    }
+    expect(failureText(exit)).toContain("without --confirm");
   });
 
-  test("help takes precedence over later commands", async () => {
+  it("help takes precedence over later commands", async () => {
     const parsed = await Effect.runPromise(
       parseArgs(["--help", "reset", "--confirm"])
     );
@@ -104,7 +123,7 @@ describe("parseArgs", () => {
     expect(parsed.command).toBe("help");
   });
 
-  test("accepts verbose flags without treating them as unknown arguments", async () => {
+  it("accepts verbose flags without treating them as unknown arguments", async () => {
     const parsed = await Effect.runPromise(
       parseArgs(["status", "--verbose", "-v"])
     );
@@ -112,8 +131,9 @@ describe("parseArgs", () => {
     expect(parsed.command).toBe("status");
   });
 
-  test("dispatches status json with fake auth and mocked fetch", async () => {
+  it("dispatches status json with fake auth and mocked fetch", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch({
       plan_type: "pro",
       rate_limit: {
@@ -139,7 +159,10 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed: { readonly planType?: string } = JSON.parse(output);
+
+    const parsed = Schema.decodeUnknownSync(
+      Schema.Struct({ planType: Schema.optionalKey(Schema.String) })
+    )(JSON.parse(output));
 
     expect(parsed.planType).toBe("pro");
     expect(calls).toHaveLength(1);
@@ -150,7 +173,7 @@ describe("parseArgs", () => {
     expect(calls[0]?.headers.get("chatgpt-account-id")).toBe("test-account-id");
   });
 
-  test("dispatches resets json with fake auth and mocked fetch", async () => {
+  it("dispatches resets json with fake auth and mocked fetch", async () => {
     const authPath = await createAuthFile();
     const calls = mockFetch({ available_count: 3, credits: [] });
 
@@ -164,7 +187,12 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed: { readonly available_count?: number } = JSON.parse(output);
+
+    const parsed = Schema.decodeUnknownSync(
+      Schema.Struct({
+        available_count: Schema.optionalKey(Schema.Number),
+      })
+    )(JSON.parse(output));
 
     expect(parsed.available_count).toBe(3);
     expect(calls).toHaveLength(1);
@@ -172,8 +200,9 @@ describe("parseArgs", () => {
     expect(calls[0]?.url).toBe(`${testBaseUrl}/wham/rate-limit-reset-credits`);
   });
 
-  test("dispatches confirmed reset json with the soonest-expiring credit", async () => {
+  it("dispatches confirmed reset json with the soonest-expiring credit", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch([
       {
         available_count: 3,
@@ -209,24 +238,34 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed: { readonly code?: string } = JSON.parse(output);
+
+    const parsed = Schema.decodeUnknownSync(
+      Schema.Struct({ code: Schema.optionalKey(Schema.String) })
+    )(JSON.parse(output));
 
     expect(parsed.code).toBe("reset");
-    expect(calls).toHaveLength(2);
-    expect(calls[0]?.method).toBe("GET");
-    expect(calls[0]?.url).toBe(`${testBaseUrl}/wham/rate-limit-reset-credits`);
-    expect(calls[1]?.method).toBe("POST");
-    expect(calls[1]?.url).toBe(
-      `${testBaseUrl}/wham/rate-limit-reset-credits/consume`
-    );
-    expect(JSON.parse(String(calls[1]?.body))).toEqual({
-      credit_id: "RateLimitResetCredit_soonest",
-      redeem_request_id: expect.any(String),
-    });
+    expect(calls.map(({ method, url }) => ({ method, url }))).toStrictEqual([
+      { method: "GET", url: `${testBaseUrl}/wham/rate-limit-reset-credits` },
+      {
+        method: "POST",
+        url: `${testBaseUrl}/wham/rate-limit-reset-credits/consume`,
+      },
+    ]);
+
+    const consumeRequest = Schema.decodeUnknownSync(
+      Schema.Struct({
+        credit_id: Schema.String,
+        redeem_request_id: Schema.String,
+      })
+    )(JSON.parse(String(calls[1]?.body)));
+
+    expect(consumeRequest.credit_id).toBe("RateLimitResetCredit_soonest");
+    expect(consumeRequest.redeem_request_id.length).toBeGreaterThan(0);
   });
 
-  test("refuses confirmed reset when no credits are available", async () => {
+  it("refuses confirmed reset when no credits are available", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch({
       available_count: 0,
       credits: [
@@ -249,15 +288,13 @@ describe("parseArgs", () => {
       ])
     );
 
-    expect(exit._tag).toBe("Failure");
     expect(calls).toHaveLength(1);
-    if (exit._tag === "Failure") {
-      expect(exit.cause.toString()).toContain("No available reset credits");
-    }
+    expect(failureText(exit)).toContain("No available reset credits");
   });
 
-  test("refuses confirmed reset when available credits have invalid expiry dates", async () => {
+  it("refuses confirmed reset when available credits have invalid expiry dates", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch({
       available_count: 1,
       credits: [
@@ -280,14 +317,11 @@ describe("parseArgs", () => {
       ])
     );
 
-    expect(exit._tag).toBe("Failure");
     expect(calls).toHaveLength(1);
-    if (exit._tag === "Failure") {
-      expect(exit.cause.toString()).toContain("No available reset credits");
-    }
+    expect(failureText(exit)).toContain("No available reset credits");
   });
 
-  test("rejects insecure remote base URLs before fetching", async () => {
+  it("rejects insecure remote base URLs before fetching", async () => {
     const authPath = await createAuthFile();
     const calls = mockFetch({ plan_type: "pro" });
 
@@ -301,52 +335,47 @@ describe("parseArgs", () => {
       ])
     );
 
-    expect(exit._tag).toBe("Failure");
     expect(calls).toHaveLength(0);
-    if (exit._tag === "Failure") {
-      expect(exit.cause.toString()).toContain(
-        "Base URL must use HTTPS unless it is localhost"
-      );
-    }
+    expect(failureText(exit)).toContain(
+      "Base URL must use HTTPS unless it is localhost"
+    );
   });
 
-  test("exits with usage code for invalid CLI base URLs", async () => {
+  it("exits with usage code for invalid CLI base URLs", async () => {
     const authPath = await createAuthFile();
-    const child = Bun.spawn(
+
+    const child = spawnSync(
+      process.execPath,
       [
-        process.execPath,
-        "src/cli.ts",
+        "dist/cli.js",
         "status",
         "--auth",
         authPath,
         "--base-url",
         "http://example.test",
       ],
-      { stderr: "pipe", stdout: "pipe" }
+      { encoding: "utf-8" }
     );
 
-    const [exitCode, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stderr).text(),
-    ]);
-
-    expect(exitCode).toBe(2);
-    expect(stderr).toContain("Base URL must use HTTPS unless it is localhost");
+    expect(child.status).toBe(2);
+    expect(child.stderr).toContain(
+      "Base URL must use HTTPS unless it is localhost"
+    );
   });
 
-  test("formats unexpected failures concisely by default", () => {
+  it("formats unexpected failures concisely by default", () => {
     const message = formatUnexpectedCliError(Cause.die("boom"), []);
 
     expect(message).toBe("An unexpected error occurred");
   });
 
-  test("formats unexpected failures verbosely with --verbose", () => {
+  it("formats unexpected failures verbosely with --verbose", () => {
     const message = formatUnexpectedCliError(Cause.die("boom"), ["--verbose"]);
 
     expect(message).toContain("boom");
   });
 
-  test("prints package name and version in status output", async () => {
+  it("prints package name and version in status output", async () => {
     const authPath = await createAuthFile();
     mockFetch({ plan_type: "pro" });
 
@@ -354,8 +383,6 @@ describe("parseArgs", () => {
       runCli(["status", "--auth", authPath, "--base-url", testBaseUrl])
     );
 
-    expect(output.split("\n")[0]).toBe(
-      `${packageJson.name} v${packageJson.version}`
-    );
+    expect(output.split("\n")[0]).toBe(packageTitle());
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, setSystemTime, test } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   CodexUsagePayload,
@@ -7,8 +7,8 @@ import type {
 import { formatResetCredits, formatUsage } from "@/usage/format.js";
 import { normalizeUsagePayload } from "@/usage/normalize.js";
 
-describe("formatUsage", () => {
-  test("prints usage windows and reset credits", () => {
+describe(formatUsage, () => {
+  it("prints usage windows and reset credits", () => {
     const payload: CodexUsagePayload = {
       plan_type: "pro",
       rate_limit: {
@@ -32,17 +32,14 @@ describe("formatUsage", () => {
       normalizeUsagePayload(payload, new Date("2026-06-19T00:00:00Z"))
     );
 
-    expect(output).toContain("Codex usage");
-    expect(output).toContain("Plan: Pro");
-    expect(output).toContain("Reset credits available: 3");
-    expect(output).toContain("5h limit");
-    expect(output).toContain("Weekly limit");
-    expect(output).toContain("75% left");
+    expect(output).toMatch(
+      /Codex usage[\s\S]*Plan: Pro[\s\S]*Reset credits available: 3[\s\S]*5h limit[\s\S]*75% left[\s\S]*Weekly limit/u
+    );
   });
 });
 
-describe("formatResetCredits", () => {
-  test("prints reset credit details", () => {
+describe(formatResetCredits, () => {
+  it("prints reset credit details", () => {
     const payload: RateLimitResetCreditsPayload = {
       available_count: 1,
       credits: [
@@ -63,7 +60,7 @@ describe("formatResetCredits", () => {
     expect(output).toContain("...23456789");
   });
 
-  test("prints recently expired reset credits as expired", () => {
+  it("prints recently expired reset credits as expired", () => {
     const payload: RateLimitResetCreditsPayload = {
       available_count: 0,
       credits: [
@@ -79,12 +76,13 @@ describe("formatResetCredits", () => {
     expect(formatResetCredits(payload)).toContain("expired");
   });
 
-  test("labels expiry relative to the local calendar day", () => {
+  it("labels expiry relative to the local calendar day", () => {
     const previousTz = process.env.TZ;
     process.env.TZ = "Pacific/Auckland";
 
     const fixedNow = new Date(2026, 6, 7, 23, 0, 0);
-    setSystemTime(fixedNow);
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
 
     try {
       const payload: RateLimitResetCreditsPayload = {
@@ -102,7 +100,8 @@ describe("formatResetCredits", () => {
       expect(formatResetCredits(payload)).toContain("expires tomorrow");
       expect(formatResetCredits(payload)).not.toContain("expires today");
     } finally {
-      setSystemTime();
+      vi.useRealTimers();
+
       if (previousTz === undefined) {
         delete process.env.TZ;
       } else {

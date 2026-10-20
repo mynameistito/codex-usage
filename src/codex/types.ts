@@ -11,14 +11,14 @@ export type JsonValue =
 
 /** Redacted Codex API credentials read from `auth.json`. */
 export interface CodexAuthTokens {
-  readonly accessToken: Redacted<string>;
+  readonly accessToken: Redacted;
   readonly accountId: string;
 }
 
 /** Optional overrides when constructing a {@link CodexClient}. */
 export interface CodexClientOptions {
-  readonly baseUrl?: string | undefined;
-  readonly userAgent?: string | undefined;
+  readonly baseUrl?: string;
+  readonly userAgent?: string;
 }
 
 /** Raw rate-limit window snapshot returned by the Codex usage API. */
@@ -31,41 +31,41 @@ export interface RateLimitWindowSnapshot {
 
 /** Raw primary/secondary rate-limit details from the Codex usage API. */
 export interface RateLimitStatusDetails {
-  readonly allowed?: boolean | undefined;
-  readonly limit_reached?: boolean | undefined;
-  readonly primary_window?: RateLimitWindowSnapshot | null | undefined;
-  readonly secondary_window?: RateLimitWindowSnapshot | null | undefined;
+  readonly allowed?: boolean;
+  readonly limit_reached?: boolean;
+  readonly primary_window?: RateLimitWindowSnapshot | null;
+  readonly secondary_window?: RateLimitWindowSnapshot | null;
 }
 
 /** Raw prepaid-credit status details from the Codex usage API. */
 export interface CreditStatusDetails {
-  readonly has_credits?: boolean | undefined;
-  readonly unlimited?: boolean | undefined;
-  readonly balance?: string | null | undefined;
+  readonly has_credits?: boolean;
+  readonly unlimited?: boolean;
+  readonly balance?: string | null;
 }
 
 /** Raw individual spend-control limit details from the Codex usage API. */
 export interface SpendControlLimitDetails {
-  readonly limit?: string | undefined;
-  readonly used?: string | undefined;
-  readonly remaining?: string | undefined;
-  readonly used_percent?: number | undefined;
-  readonly remaining_percent?: number | undefined;
-  readonly reset_after_seconds?: number | undefined;
-  readonly reset_at?: number | undefined;
+  readonly limit?: string;
+  readonly used?: string;
+  readonly remaining?: string;
+  readonly used_percent?: number;
+  readonly remaining_percent?: number;
+  readonly reset_after_seconds?: number;
+  readonly reset_at?: number;
 }
 
 /** Raw spend-control status wrapper from the Codex usage API. */
 export interface SpendControlStatusDetails {
-  readonly reached?: boolean | undefined;
-  readonly individual_limit?: SpendControlLimitDetails | null | undefined;
+  readonly reached?: boolean;
+  readonly individual_limit?: SpendControlLimitDetails | null;
 }
 
 /** Raw additional metered rate limit entry from the Codex usage API. */
 export interface AdditionalRateLimitDetails {
   readonly limit_name: string;
   readonly metered_feature: string;
-  readonly rate_limit?: RateLimitStatusDetails | null | undefined;
+  readonly rate_limit?: RateLimitStatusDetails | null;
 }
 
 /** Raw rate-limit reached classification from the Codex usage API. */
@@ -81,18 +81,14 @@ export interface RateLimitResetCreditsSummary {
 /** Parsed Codex `/wham/usage` response payload. */
 export interface CodexUsagePayload {
   readonly plan_type: string;
-  readonly rate_limit?: RateLimitStatusDetails | null | undefined;
-  readonly credits?: CreditStatusDetails | null | undefined;
-  readonly spend_control?: SpendControlStatusDetails | null | undefined;
+  readonly rate_limit?: RateLimitStatusDetails | null;
+  readonly credits?: CreditStatusDetails | null;
+  readonly spend_control?: SpendControlStatusDetails | null;
   readonly additional_rate_limits?:
     | readonly AdditionalRateLimitDetails[]
-    | null
-    | undefined;
-  readonly rate_limit_reached_type?: RateLimitReachedType | null | undefined;
-  readonly rate_limit_reset_credits?:
-    | RateLimitResetCreditsSummary
-    | null
-    | undefined;
+    | null;
+  readonly rate_limit_reached_type?: RateLimitReachedType | null;
+  readonly rate_limit_reset_credits?: RateLimitResetCreditsSummary | null;
 }
 
 /** A single normalized primary or secondary usage window for display. */
@@ -132,20 +128,20 @@ type RateLimitResetCreditStatus = "available" | "expired" | "redeemed";
 
 /** A single banked rate-limit reset credit from the Codex API. */
 export interface RateLimitResetCredit {
-  readonly id?: string | undefined;
-  readonly title?: string | undefined;
-  readonly status?: RateLimitResetCreditStatus | undefined;
-  readonly profile_user_id?: string | undefined;
-  readonly granted_at?: string | undefined;
-  readonly expires_at?: string | undefined;
-  readonly redeemed_at?: string | null | undefined;
-  readonly description?: string | undefined;
+  readonly id?: string;
+  readonly title?: string;
+  readonly status?: RateLimitResetCreditStatus;
+  readonly profile_user_id?: string;
+  readonly granted_at?: string;
+  readonly expires_at?: string;
+  readonly redeemed_at?: string | null;
+  readonly description?: string;
 }
 
 /** Parsed Codex `/wham/rate-limit-reset-credits` response payload. */
 export interface RateLimitResetCreditsPayload {
-  readonly available_count?: number | undefined;
-  readonly credits?: readonly RateLimitResetCredit[] | undefined;
+  readonly available_count?: number;
+  readonly credits?: readonly RateLimitResetCredit[];
 }
 
 /** Known result codes returned by the consume-reset endpoint. */
