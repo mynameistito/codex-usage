@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "vitest";
 
 import type { CodexUsagePayload } from "@/codex/types.js";
 import {
@@ -6,20 +6,20 @@ import {
   normalizeUsagePayload,
 } from "@/usage/normalize.js";
 
-describe("limitLabelForWindow", () => {
-  test("labels known Codex windows by duration", () => {
+describe(limitLabelForWindow, () => {
+  it("labels known Codex windows by duration", () => {
     expect(limitLabelForWindow(18_000, "primary")).toBe("5h");
     expect(limitLabelForWindow(604_800, "secondary")).toBe("weekly");
   });
 
-  test("falls back by window kind for unknown durations", () => {
+  it("falls back by window kind for unknown durations", () => {
     expect(limitLabelForWindow(123, "primary")).toBe("usage");
     expect(limitLabelForWindow(123, "secondary")).toBe("secondary usage");
   });
 });
 
-describe("normalizeUsagePayload", () => {
-  test("maps main and additional limits", () => {
+describe(normalizeUsagePayload, () => {
+  it("maps main and additional limits", () => {
     const payload: CodexUsagePayload = {
       additional_rate_limits: [
         {
@@ -64,10 +64,9 @@ describe("normalizeUsagePayload", () => {
 
     expect(usage.resetCreditsAvailable).toBe(2);
     expect(usage.limits).toHaveLength(2);
-    expect(usage.limits[0]?.windows.map((window) => window.label)).toEqual([
-      "5h",
-      "weekly",
-    ]);
+    expect(
+      usage.limits[0]?.windows.map((window) => window.label)
+    ).toStrictEqual(["5h", "weekly"]);
     expect(usage.limits[1]?.windows[0]?.label).toBe("daily");
   });
 });

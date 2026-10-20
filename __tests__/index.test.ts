@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+
+import { describe, expect, it } from "vitest";
 
 import {
   CliError,
@@ -10,7 +12,7 @@ import {
 import type { CodexUsageError } from "@/index.js";
 
 describe("public exports", () => {
-  test("exports error classes from the package root", () => {
+  it("exports error classes from the package root", () => {
     const errors: CodexUsageError[] = [
       new CodexAuthError({ message: "missing auth" }),
       new CodexConfigError({ message: "invalid base URL" }),
@@ -26,7 +28,7 @@ describe("public exports", () => {
     expect(new CliError({ exitCode: 1, message: "failed" })).toBeInstanceOf(
       CliError
     );
-    expect(errors.map((error) => error._tag)).toEqual([
+    expect(errors.map((error) => error._tag)).toStrictEqual([
       "CodexAuthError",
       "CodexConfigError",
       "CodexHttpError",
@@ -34,18 +36,11 @@ describe("public exports", () => {
     ]);
   });
 
-  test("built CLI prints help without accessing the network", async () => {
-    await Bun.$`bun run build`.quiet();
-
-    const child = Bun.spawn([process.execPath, "dist/cli.js", "--help"], {
-      stdout: "pipe",
+  it("built CLI prints help without accessing the network", () => {
+    const stdout = execFileSync(process.execPath, ["dist/cli.js", "--help"], {
+      encoding: "utf-8",
     });
-    const [exitCode, stdout] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-    ]);
 
-    expect(exitCode).toBe(0);
-    expect(stdout).toStartWith("codex-usage\n\nUsage:");
+    expect(stdout.startsWith("codex-usage\n\nUsage:")).toBeTruthy();
   }, 15_000);
 });

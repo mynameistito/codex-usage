@@ -10,7 +10,10 @@ import type {
   SpendControlLimitDetails,
 } from "@/codex/types.js";
 
-/** Converts a positive window length in seconds to rounded minutes. */
+/** Converts a positive window length in seconds to rounded minutes.
+ * @param seconds - Window length to convert.
+ * @returns Rounded minutes, or `null` for invalid lengths.
+ */
 const secondsToMinutes = (seconds: number): number | null => {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return null;
@@ -19,7 +22,11 @@ const secondsToMinutes = (seconds: number): number | null => {
   return Math.ceil(seconds / 60);
 };
 
-/** Returns whether `minutes` is within five percent of `expected`. */
+/** Returns whether `minutes` is within five percent of `expected`.
+ * @param minutes - Rounded window length in minutes.
+ * @param expected - Expected window length in minutes.
+ * @returns Whether the values are within five percent.
+ */
 const isApproximateWindow = (minutes: number, expected: number): boolean =>
   minutes >= expected * 0.95 && minutes <= expected * 1.05;
 
@@ -28,6 +35,7 @@ const isApproximateWindow = (minutes: number, expected: number): boolean =>
  *
  * @param windowSeconds - Window length reported by the Codex API.
  * @param kind - Whether the window is primary or secondary.
+ * @returns A display label for the window duration.
  */
 export const limitLabelForWindow = (
   windowSeconds: number,
@@ -65,7 +73,10 @@ export const limitLabelForWindow = (
   return kind === "secondary" ? "secondary usage" : "usage";
 };
 
-/** Clamps a percentage value into the inclusive `0..100` range. */
+/** Clamps a percentage value into the inclusive `0..100` range.
+ * @param value - Percentage value to clamp.
+ * @returns A finite percentage between 0 and 100.
+ */
 const clampPercent = (value: number): number => {
   if (!Number.isFinite(value)) {
     return 0;
@@ -79,6 +90,7 @@ const clampPercent = (value: number): number => {
  *
  * @param kind - Whether the window is primary or secondary.
  * @param window - Raw window snapshot from the Codex API.
+ * @returns Normalized window details, or `null` when absent.
  */
 const normalizeWindow = (
   kind: "primary" | "secondary",
@@ -89,6 +101,7 @@ const normalizeWindow = (
   }
 
   const usedPercent = clampPercent(window.used_percent);
+
   const resetsAt =
     window.reset_at > 0 ? new Date(window.reset_at * 1000) : null;
 
@@ -103,7 +116,10 @@ const normalizeWindow = (
   };
 };
 
-/** Normalizes the primary and secondary windows for a rate-limit block. */
+/** Normalizes the primary and secondary windows for a rate-limit block.
+ * @param details - Rate-limit details, if available.
+ * @returns The available normalized windows.
+ */
 const normalizeWindows = (
   details: RateLimitStatusDetails | null | undefined
 ): readonly NormalizedRateLimitWindow[] =>
@@ -112,7 +128,10 @@ const normalizeWindows = (
     normalizeWindow("secondary", details?.secondary_window),
   ].filter((window): window is NormalizedRateLimitWindow => window !== null);
 
-/** Builds a normalized rate-limit record from shared API fields. */
+/** Builds a normalized rate-limit record from shared API fields.
+ * @param params - Shared and limit-specific rate-limit values.
+ * @returns A normalized rate-limit record.
+ */
 const normalizeLimit = (params: {
   readonly id: string;
   readonly name: string | null;
@@ -133,7 +152,11 @@ const normalizeLimit = (params: {
   windows: normalizeWindows(params.details),
 });
 
-/** Normalizes an additional metered rate limit from the usage payload. */
+/** Normalizes an additional metered rate limit from the usage payload.
+ * @param planType - Account plan identifier.
+ * @param limit - Additional metered limit from the API.
+ * @returns A normalized rate-limit record.
+ */
 const normalizeAdditionalLimit = (
   planType: string,
   limit: AdditionalRateLimitDetails
@@ -153,12 +176,14 @@ const normalizeAdditionalLimit = (
  *
  * @param payload - Parsed usage response from the Codex API.
  * @param capturedAt - Timestamp to record on the normalized snapshot.
+ * @returns The normalized usage snapshot.
  */
 export const normalizeUsagePayload = (
   payload: CodexUsagePayload,
   capturedAt = new Date()
 ): NormalizedUsage => {
   const individualLimit = payload.spend_control?.individual_limit ?? null;
+
   const primaryLimit = normalizeLimit({
     credits: payload.credits ?? null,
     details: payload.rate_limit,
@@ -168,6 +193,7 @@ export const normalizeUsagePayload = (
     planType: payload.plan_type,
     rateLimitReachedType: payload.rate_limit_reached_type?.type ?? null,
   });
+
   const additionalLimits = (payload.additional_rate_limits ?? []).map((limit) =>
     normalizeAdditionalLimit(payload.plan_type, limit)
   );

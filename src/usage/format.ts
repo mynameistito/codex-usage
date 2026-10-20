@@ -11,13 +11,19 @@ interface FormatUsageOptions {
   readonly title?: string;
 }
 
-/** Capitalizes the first character and lowercases the remainder. */
+/** Capitalizes the first character and lowercases the remainder.
+ * @param value - Text to convert.
+ * @returns The title-cased text.
+ */
 const titleCase = (value: string): string =>
   value.length === 0
     ? value
     : value[0]?.toUpperCase() + value.slice(1).toLowerCase();
 
-/** Maps raw Codex plan type identifiers to display labels. */
+/** Maps raw Codex plan type identifiers to display labels.
+ * @param planType - API plan identifier.
+ * @returns A human-readable plan label.
+ */
 const formatPlanType = (planType: string): string => {
   if (planType === "prolite") {
     return "Pro Lite";
@@ -37,13 +43,17 @@ const formatPlanType = (planType: string): string => {
 /** Accepted date inputs for {@link formatDateTime}. */
 type NullableDateInput = Date | string | null;
 
-/** Formats a date value for CLI output, or `None` when absent. */
+/** Formats a date value for CLI output, or `None` when absent.
+ * @param value - Date value to format.
+ * @returns A localized date and time, or `None` when absent.
+ */
 const formatDateTime = (value: NullableDateInput | undefined): string => {
-  if (!value) {
+  if (value === undefined || value === null) {
     return "None";
   }
 
   const date = value instanceof Date ? value : new Date(value);
+
   if (Number.isNaN(date.getTime())) {
     return String(value);
   }
@@ -54,40 +64,56 @@ const formatDateTime = (value: NullableDateInput | undefined): string => {
   }).format(date);
 };
 
-/** Formats a duration in seconds as a compact CLI countdown string. */
+/** Formats a duration in seconds as a compact CLI countdown string.
+ * @param seconds - Duration to format.
+ * @returns Compact countdown text.
+ */
 const secondsToDuration = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return "now";
   }
 
   const minutes = Math.ceil(seconds / 60);
+
   if (minutes < 60) {
     return `${minutes}m`;
   }
 
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
+
   if (hours < 24) {
     return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`;
   }
 
   const days = Math.floor(hours / 24);
   const hourRemainder = hours % 24;
+
   return hourRemainder === 0 ? `${days}d` : `${days}d ${hourRemainder}h`;
 };
 
-/** Formats a percentage value with no fractional digits. */
+/** Formats a percentage value with no fractional digits.
+ * @param value - Percentage to format.
+ * @returns Percentage text.
+ */
 const percent = (value: number): string => `${value.toFixed(0)}%`;
 
-/** Renders a fixed-width ASCII progress bar for remaining quota. */
+/** Renders a fixed-width ASCII progress bar for remaining quota.
+ * @param remainingPercent - Remaining quota percentage.
+ * @returns A 20-segment progress bar.
+ */
 const progressBar = (remainingPercent: number): string => {
   const segments = 20;
   const ratio = Math.min(1, Math.max(0, remainingPercent / 100));
   const filled = Math.round(ratio * segments);
+
   return `[${"#".repeat(filled)}${"-".repeat(segments - filled)}]`;
 };
 
-/** Formats a single normalized usage window for CLI output. */
+/** Formats a single normalized usage window for CLI output.
+ * @param window - Normalized usage window.
+ * @returns The formatted window details.
+ */
 const formatWindow = (window: NormalizedRateLimitWindow): string => {
   const resetText = window.resetsAt
     ? `${formatDateTime(window.resetsAt)} (${secondsToDuration(window.resetAfterSeconds)})`
@@ -106,6 +132,7 @@ const formatWindow = (window: NormalizedRateLimitWindow): string => {
  *
  * @param usage - Normalized usage returned by {@link normalizeUsagePayload}.
  * @param options - Optional heading override.
+ * @returns Human-readable usage output.
  */
 export const formatUsage = (
   usage: NormalizedUsage,
@@ -127,6 +154,7 @@ export const formatUsage = (
     }
 
     lines.push("");
+
     if (limit.id !== "codex") {
       lines.push(`${limit.name} (${limit.id})`);
     }
@@ -145,13 +173,19 @@ type NullableString = string | null;
 /** Number of milliseconds in one calendar day. */
 const millisecondsPerDay = 86_400_000;
 
-/** Returns the local-midnight timestamp for the calendar day containing `date`. */
+/** Returns the local-midnight timestamp for the calendar day containing `date`.
+ * @param date - Date whose calendar day is used.
+ * @returns The timestamp at local midnight.
+ */
 const startOfLocalDay = (date: Date): number =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 
 /**
  * Counts whole local calendar days from `from` until `to`.
  * Same-day values return `0`; the next local day returns `1`.
+ * @param from - Start date.
+ * @param to - End date.
+ * @returns Number of whole local calendar days.
  */
 const calendarDaysBetween = (from: Date, to: Date): number =>
   Math.floor(
@@ -161,23 +195,28 @@ const calendarDaysBetween = (from: Date, to: Date): number =>
 /**
  * Formats a human-readable expiry countdown for reset-credit timestamps.
  * Returns an empty string for missing or invalid values.
+ * @param value - Expiry timestamp.
+ * @returns Human-readable countdown text.
  */
 const daysUntil = (value: NullableString | undefined): string => {
-  if (!value) {
+  if (value === undefined || value === null || value.length === 0) {
     return "";
   }
 
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) {
     return "";
   }
 
   const millisecondsUntilExpiry = date.getTime() - Date.now();
+
   if (millisecondsUntilExpiry < 0) {
     return "expired";
   }
 
   const days = calendarDaysBetween(new Date(), date);
+
   if (days === 0) {
     return "expires today";
   }
@@ -189,7 +228,10 @@ const daysUntil = (value: NullableString | undefined): string => {
   return `${days} days left`;
 };
 
-/** Returns the shortened suffix of a reset-credit identifier for display. */
+/** Returns the shortened suffix of a reset-credit identifier for display.
+ * @param credit - Credit whose identifier is displayed.
+ * @returns Short identifier suffix or `unknown`.
+ */
 const shortCreditId = (credit: RateLimitResetCredit): string =>
   credit.id?.replace(/^RateLimitResetCredit_/u, "").slice(-8) ?? "unknown";
 
@@ -197,14 +239,17 @@ const shortCreditId = (credit: RateLimitResetCredit): string =>
  * Formats reset-credit inventory for CLI output.
  *
  * @param payload - Reset-credit payload from the Codex API.
+ * @returns Human-readable reset-credit inventory.
  */
 export const formatResetCredits = (
   payload: RateLimitResetCreditsPayload
 ): string => {
   const credits = payload.credits ?? [];
+
   const available =
     payload.available_count ??
     credits.filter((credit) => credit.status === "available").length;
+
   const lines = ["Codex rate limit reset credits", `Available: ${available}`];
 
   if (credits.length === 0) {
@@ -225,7 +270,7 @@ export const formatResetCredits = (
       `   Credit ID: ...${shortCreditId(credit)}`
     );
 
-    if (credit.description) {
+    if (credit.description !== undefined && credit.description.length > 0) {
       lines.push(`   Note:     ${credit.description}`);
     }
   }
@@ -237,10 +282,12 @@ export const formatResetCredits = (
  * Formats a consume-reset API response for CLI output.
  *
  * @param response - Parsed consume-reset response from the Codex API.
+ * @returns Human-readable reset result.
  */
 export const formatConsumeResetResponse = (
   response: ConsumeResetResponse
 ): string => {
   const result = response.code.replaceAll("_", " ");
+
   return `Reset result: ${result}\nWindows reset: ${response.windows_reset}\n`;
 };

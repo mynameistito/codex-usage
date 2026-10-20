@@ -9,7 +9,10 @@ interface PackageMetadata {
   readonly version: string;
 }
 
-/** Type guard for {@link PackageMetadata}. */
+/** Type guard for {@link PackageMetadata}.
+ * @param value - Candidate package metadata.
+ * @returns Whether the value has package name and version strings.
+ */
 const isPackageMetadata = (value: unknown): value is PackageMetadata => {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -22,9 +25,12 @@ const isPackageMetadata = (value: unknown): value is PackageMetadata => {
   return "version" in value && typeof value.version === "string";
 };
 
-/** Returns the published package name and version for CLI headings. */
+/** Returns the published package name and version for CLI headings.
+ * @returns The formatted package title, or the fallback CLI name.
+ */
 export const packageTitle = (): string => {
   const metadata: unknown = requirePackageJson("../package.json");
+
   if (!isPackageMetadata(metadata)) {
     return "codex-usage";
   }

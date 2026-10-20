@@ -31,6 +31,27 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** Default `User-Agent` header sent to the Codex API. */
 const DEFAULT_USER_AGENT = "codex-cli";
 
+/** Returns whether an unknown value is a JSON value.
+ * @param value - Candidate JSON value.
+ * @returns Whether the candidate is valid JSON data.
+ */
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+
+  return typeof value === "object" && Object.values(value).every(isJsonValue);
+};
+
 /** Hostnames that require the `/backend-api` path prefix. */
 const CHATGPT_HOSTNAMES = new Set(["chat.openai.com", "chatgpt.com"]);
 
@@ -40,7 +61,10 @@ export interface ConsumeResetCreditOptions {
   readonly redeemRequestId?: string;
 }
 
-/** Returns whether `value` is a plain consume-reset options object. */
+/** Returns whether `value` is a plain consume-reset options object.
+ * @param value - Candidate consume-reset options.
+ * @returns Whether the value is an options object.
+ */
 const isConsumeResetCreditOptions = (
   value: ConsumeResetCreditOptions | null
 ): value is ConsumeResetCreditOptions =>
@@ -50,6 +74,7 @@ const isConsumeResetCreditOptions = (
  * Normalizes consume-reset options and rejects legacy positional callers.
  *
  * @param consumeOptions - Options object, or `undefined`/`null` for defaults.
+ * @returns Normalized options or a typed parse error.
  */
 const normalizeConsumeResetCreditOptions = (
   consumeOptions?: ConsumeResetCreditOptions | null
@@ -71,7 +96,10 @@ const normalizeConsumeResetCreditOptions = (
   return Effect.succeed(consumeOptions);
 };
 
-/** Returns whether `hostname` refers to a loopback interface. */
+/** Returns whether `hostname` refers to a loopback interface.
+ * @param hostname - URL hostname to inspect.
+ * @returns Whether the hostname is a loopback address.
+ */
 const isLoopbackHostname = (hostname: string): boolean => {
   if (hostname === "localhost") {
     return true;
@@ -96,12 +124,14 @@ const isLoopbackHostname = (hostname: string): boolean => {
  * Normalizes and validates a Codex API base URL.
  *
  * @param baseUrl - Candidate base URL. Defaults to {@link DEFAULT_BASE_URL}.
+ * @returns Normalized URL or a typed configuration error.
  */
 const normalizeBaseUrl = (
   baseUrl = DEFAULT_BASE_URL
 ): Effect.Effect<string, CodexConfigError> =>
   Effect.gen(function* normalizeBaseUrlEffect() {
     let parsed: URL;
+
     try {
       parsed = new URL(baseUrl);
     } catch (error) {
@@ -111,13 +141,13 @@ const normalizeBaseUrl = (
       });
     }
 
-    if (parsed.username || parsed.password) {
+    if (parsed.username.length > 0 || parsed.password.length > 0) {
       return yield* new CodexConfigError({
         message: "Base URL must not include credentials",
       });
     }
 
-    if (parsed.search || parsed.hash) {
+    if (parsed.search.length > 0 || parsed.hash.length > 0) {
       return yield* new CodexConfigError({
         message: "Base URL must not include a query string or fragment",
       });
@@ -136,6 +166,7 @@ const normalizeBaseUrl = (
     }
 
     let normalized = parsed.toString();
+
     while (normalized.endsWith("/")) {
       normalized = normalized.slice(0, -1);
     }
@@ -143,9 +174,11 @@ const normalizeBaseUrl = (
     if (CHATGPT_HOSTNAMES.has(parsed.hostname)) {
       const { pathname: parsedPathname } = parsed;
       let pathname = parsedPathname;
+
       while (pathname.endsWith("/")) {
         pathname = pathname.slice(0, -1);
       }
+
       pathname ||= "/";
 
       if (pathname === "/") {
@@ -162,7 +195,11 @@ const normalizeBaseUrl = (
     return normalized;
   });
 
-/** Builds JSON request headers for authenticated Codex POST requests. */
+/** Builds JSON request headers for authenticated Codex POST requests.
+ * @param tokens - Redacted credentials used for authentication.
+ * @param userAgent - User-agent header value.
+ * @returns Authenticated JSON request headers.
+ */
 const jsonHeaders = (
   tokens: CodexAuthTokens,
   userAgent: string
@@ -173,7 +210,11 @@ const jsonHeaders = (
   "User-Agent": userAgent,
 });
 
-/** Builds request headers for authenticated Codex GET requests. */
+/** Builds request headers for authenticated Codex GET requests.
+ * @param tokens - Redacted credentials used for authentication.
+ * @param userAgent - User-agent header value.
+ * @returns Authenticated request headers.
+ */
 const getHeaders = (
   tokens: CodexAuthTokens,
   userAgent: string
@@ -188,6 +229,7 @@ const getHeaders = (
  *
  * @param url - Fully qualified request URL.
  * @param init - Fetch request options.
+ * @returns Parsed JSON response or a typed HTTP/parse error.
  */
 const requestJson = (
   url: string,
@@ -208,8 +250,8 @@ const requestJson = (
               ? "TIMEOUT"
               : "NETWORK_ERROR",
         }),
-      try: () =>
-        fetch(url, {
+      try: async () =>
+        await fetch(url, {
           ...init,
           signal:
             init.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
@@ -224,7 +266,7 @@ const requestJson = (
           status: response.status,
           statusText: response.statusText,
         }),
-      try: () => response.text(),
+      try: async () => await response.text(),
     });
 
     if (!response.ok) {
@@ -243,7 +285,12 @@ const requestJson = (
           value: body,
         }),
       try: () => {
-        const parsedValue: JsonValue = JSON.parse(body);
+        const parsedValue: unknown = JSON.parse(body);
+
+        if (!isJsonValue(parsedValue)) {
+          throw new TypeError("Response contains a non-JSON value");
+        }
+
         return parsedValue;
       },
     });
@@ -272,6 +319,7 @@ export interface CodexClient {
  *
  * @param tokens - Redacted credentials from {@link readCodexAuth}.
  * @param options - Optional base URL and user-agent overrides.
+ * @returns An authenticated client or a typed configuration error.
  */
 export const createCodexClient = (
   tokens: CodexAuthTokens,
@@ -298,7 +346,8 @@ export const createCodexClient = (
             `${baseUrl}/wham/rate-limit-reset-credits/consume`,
             {
               body: JSON.stringify(
-                resolvedOptions.creditId
+                resolvedOptions.creditId !== undefined &&
+                  resolvedOptions.creditId.length > 0
                   ? {
                       credit_id: resolvedOptions.creditId,
                       redeem_request_id:
