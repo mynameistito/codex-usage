@@ -40,6 +40,7 @@ describe("public exports", () => {
     const child = Bun.spawn([process.execPath, "dist/cli.js", "--help"], {
       stdout: "pipe",
     });
+
     const [exitCode, stdout] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),

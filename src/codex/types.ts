@@ -11,7 +11,7 @@ export type JsonValue =
 
 /** Redacted Codex API credentials read from `auth.json`. */
 export interface CodexAuthTokens {
-  readonly accessToken: Redacted<string>;
+  readonly accessToken: Redacted;
   readonly accountId: string;
 }
 

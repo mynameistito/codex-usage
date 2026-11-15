@@ -19,11 +19,11 @@ import { Schema } from "effect";
 
 /** Subset of `package.json` fields read by this script. */
 interface PackageJson {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  name?: string;
-  optionalDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
+  dependencies?: Record<string, string> | undefined;
+  devDependencies?: Record<string, string> | undefined;
+  name?: string | undefined;
+  optionalDependencies?: Record<string, string> | undefined;
+  peerDependencies?: Record<string, string> | undefined;
 }
 
 /** Supported Changesets semver bump types. */
@@ -35,7 +35,10 @@ const PACKAGE_JSON_FILENAME = "package.json";
 /** Allowed Changesets bump types. */
 const changesetTypes = ["patch", "minor", "major"] as const;
 
-/** Returns whether `type` is a supported Changesets bump type. */
+/** Returns whether `type` is a supported Changesets bump type.
+ * @returns whether `type` is a supported Changesets bump type.
+ * @param type - Input for this operation.
+ */
 const isChangesetType = (type: string | undefined): type is ChangesetType =>
   type !== undefined && changesetTypes.some((value) => value === type);
 
@@ -43,6 +46,7 @@ const isChangesetType = (type: string | undefined): type is ChangesetType =>
  * Walks parent directories from `startDir` until a `package.json` is found.
  *
  * @param startDir - Directory to begin searching from.
+ * @returns Walks parent directories from `startDir` until a `package.json` is found.
  */
 const findProjectRoot = (startDir: string) => {
   let currentDir = startDir;
@@ -60,24 +64,40 @@ const findProjectRoot = (startDir: string) => {
   }
 
   console.error(`Could not find ${PACKAGE_JSON_FILENAME} from script location`);
-  process.exit(1);
+
+  return process.exit(1);
 };
 
 /**
  * Reads and parses `package.json` from `packageJsonPath`.
  *
  * @param packageJsonPath - Absolute path to `package.json`.
+ * @returns Reads and parses `package.json` from `packageJsonPath`.
  */
 const readPackageJson = (packageJsonPath: string) => {
   try {
-    const packageJson: PackageJson = JSON.parse(
-      readFileSync(packageJsonPath, "utf-8")
-    );
-    return packageJson;
+    return Schema.decodeUnknownSync(
+      Schema.Struct({
+        name: Schema.optional(Schema.String),
+        dependencies: Schema.optional(
+          Schema.Record(Schema.String, Schema.String)
+        ),
+        devDependencies: Schema.optional(
+          Schema.Record(Schema.String, Schema.String)
+        ),
+        optionalDependencies: Schema.optional(
+          Schema.Record(Schema.String, Schema.String)
+        ),
+        peerDependencies: Schema.optional(
+          Schema.Record(Schema.String, Schema.String)
+        ),
+      })
+    )(JSON.parse(readFileSync(packageJsonPath, "utf-8")));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`Failed to read package.json: ${message}`);
-    process.exit(1);
+
+    return process.exit(1);
   }
 };
 
@@ -85,22 +105,27 @@ const readPackageJson = (packageJsonPath: string) => {
  * Returns the package name from parsed `package.json` metadata.
  *
  * @param packageJson - Parsed package metadata.
+ * @returns the package name from parsed `package.json` metadata.
  */
 const getPackageName = (packageJson: PackageJson) => {
   if (!Schema.is(Schema.String)(packageJson.name) || !packageJson.name.trim()) {
     console.error("package.json must include a non-empty name field");
-    process.exit(1);
+
+    return process.exit(1);
   }
 
   return packageJson.name;
 };
 
-/** Returns whether `@changesets/cli` is declared in `package.json`. */
+/** Returns whether `@changesets/cli` is declared in `package.json`.
+ * @param packageJson - package Json.
+ * @returns whether `@changesets/cli` is declared in `package.json`.
+ */
 const hasChangesetsCliDependency = (packageJson: PackageJson) =>
   Boolean(
-    packageJson.dependencies?.["@changesets/cli"] ||
-    packageJson.devDependencies?.["@changesets/cli"] ||
-    packageJson.optionalDependencies?.["@changesets/cli"] ||
+    packageJson.dependencies?.["@changesets/cli"] ??
+    packageJson.devDependencies?.["@changesets/cli"] ??
+    packageJson.optionalDependencies?.["@changesets/cli"] ??
     packageJson.peerDependencies?.["@changesets/cli"]
   );
 
@@ -109,15 +134,17 @@ const hasChangesetsCliDependency = (packageJson: PackageJson) =>
  *
  * @param packageJson - Parsed package metadata.
  * @param projectRoot - Repository root directory.
+ * @returns Verifies that `@changesets/cli` is declared and installed.
  */
 const assertChangesetsCliInstalled = (
   packageJson: PackageJson,
   projectRoot: string
-) => {
+): void => {
   if (!hasChangesetsCliDependency(packageJson)) {
     console.error('Missing dependency: "@changesets/cli"');
     console.error('Install it with: bun add -d "@changesets/cli"');
-    process.exit(1);
+
+    return process.exit(1);
   }
 
   const requireFromProject = createRequire(
@@ -129,7 +156,8 @@ const assertChangesetsCliInstalled = (
   } catch {
     console.error('Dependency "@changesets/cli" is declared but not installed');
     console.error("Run: bun install");
-    process.exit(1);
+
+    return process.exit(1);
   }
 };
 
@@ -137,6 +165,7 @@ const assertChangesetsCliInstalled = (
  * Parses and validates the requested Changesets bump type.
  *
  * @param type - Raw CLI type argument.
+ * @returns Parses and validates the requested Changesets bump type.
  */
 const parseChangesetType = (type: string | undefined): ChangesetType => {
   if (isChangesetType(type)) {
@@ -144,13 +173,16 @@ const parseChangesetType = (type: string | undefined): ChangesetType => {
   }
 
   console.error(`Invalid type: ${type}. Must be patch, minor, or major.`);
-  process.exit(1);
+
+  return process.exit(1);
 };
 
 /**
  * Generates a unique changeset filename inside `.changeset`.
  *
  * @param changesetDir - Absolute path to the `.changeset` directory.
+ * @param content - content.
+ * @returns Generates a unique changeset filename inside `.changeset`.
  */
 const createChangesetFile = (changesetDir: string, content: string) => {
   mkdirSync(changesetDir, { recursive: true });
@@ -161,17 +193,21 @@ const createChangesetFile = (changesetDir: string, content: string) => {
 
     try {
       writeFileSync(filename, content, { flag: "wx" });
+
       return filename;
     } catch (error) {
       // SAFETY: filesystem failures expose `code` through Node's documented error shape.
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "EEXIST")
+      ) {
         throw error;
       }
     }
   }
 
   console.error("Could not generate a unique changeset filename");
-  process.exit(1);
+
+  return process.exit(1);
 };
 
 const args = process.argv.slice(2);
@@ -180,6 +216,7 @@ if (args.length < 2) {
   console.error("Usage: add-changeset.ts <type> <summary>");
   console.error("  type: patch | minor | major");
   console.error("  summary: Description of the change");
+
   process.exit(1);
 }
 
@@ -189,6 +226,7 @@ const summary = summaryParts.join(" ");
 
 if (!summary.trim()) {
   console.error("Summary cannot be empty");
+
   process.exit(1);
 }
 
@@ -196,9 +234,11 @@ const projectRoot = findProjectRoot(import.meta.dirname);
 const packageJsonPath = path.join(projectRoot, PACKAGE_JSON_FILENAME);
 const packageJson = readPackageJson(packageJsonPath);
 const packageName = getPackageName(packageJson);
+
 assertChangesetsCliInstalled(packageJson, projectRoot);
 
 const changesetDir = path.join(projectRoot, ".changeset");
+
 const content = `---
 "${packageName}": ${changesetType}
 ---
@@ -208,7 +248,11 @@ ${summary.trim()}
 
 const filename = createChangesetFile(changesetDir, content);
 const relativeFilename = path.relative(projectRoot, filename);
+
 console.log(`✓ Created changeset: ${relativeFilename}`);
+
 console.log(`  Package: ${packageName}`);
+
 console.log(`  Type: ${changesetType}`);
+
 console.log(`  Summary: ${summary}`);

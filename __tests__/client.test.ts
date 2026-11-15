@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { Effect, Redacted } from "effect";
+import { Schema, Effect, Redacted } from "effect";
 
 import { createCodexClient } from "@/codex/client.js";
 import type { CodexClient } from "@/codex/client.js";
@@ -24,9 +24,17 @@ const withClient = <A, E>(
 
 const mockResponse = (body: JsonValue | readonly JsonValue[]): void => {
   // SAFETY: this test double implements the global fetch contract for every call.
-  const fetchMock = Object.assign(() => Promise.resolve(Response.json(body)), {
-    preconnect: () => null,
-  });
+  const fetchMock = Object.assign(
+    async () => {
+      await Promise.resolve();
+
+      return Response.json(body);
+    },
+    {
+      preconnect: () => null,
+    }
+  );
+
   globalThis.fetch = fetchMock;
 };
 
@@ -43,6 +51,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Usage response was not an object"
@@ -56,6 +65,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Base URL must use HTTPS unless it is localhost"
@@ -69,6 +79,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Base URL must use HTTP or HTTPS"
@@ -78,14 +89,19 @@ describe("createCodexClient", () => {
 
   test("allows HTTP loopback base URLs", async () => {
     const calls: string[] = [];
+
     // SAFETY: this test double implements the global fetch contract for every call.
     const fetchMock = Object.assign(
-      (input: Parameters<typeof fetch>[0]) => {
-        calls.push(String(input));
-        return Promise.resolve(Response.json({ plan_type: "pro" }));
+      async (input: Parameters<typeof fetch>[0]) => {
+        await Promise.resolve();
+
+        calls.push(input instanceof Request ? input.url : input.toString());
+
+        return Response.json({ plan_type: "pro" });
       },
       { preconnect: () => null }
     );
+
     globalThis.fetch = fetchMock;
 
     await Effect.runPromise(
@@ -103,6 +119,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Base URL must not include credentials"
@@ -116,6 +133,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Base URL must not include a query string or fragment"
@@ -129,6 +147,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Base URL must not include a query string or fragment"
@@ -139,10 +158,16 @@ describe("createCodexClient", () => {
   test("only appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
     // SAFETY: this test double implements the global fetch contract for every call.
-    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
-      calls.push(String(input));
-      return Promise.resolve(Response.json({ plan_type: "pro" }));
-    }) as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async (input: Parameters<typeof fetch>[0]) => {
+        await Promise.resolve();
+
+        calls.push(input instanceof Request ? input.url : input.toString());
+
+        return Response.json({ plan_type: "pro" });
+      },
+      { preconnect: () => null }
+    );
 
     await Effect.runPromise(
       withClient((client) => client.fetchUsage(), {
@@ -156,10 +181,16 @@ describe("createCodexClient", () => {
   test("appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
     // SAFETY: this test double implements the global fetch contract for every call.
-    globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
-      calls.push(String(input));
-      return Promise.resolve(Response.json({ plan_type: "pro" }));
-    }) as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async (input: Parameters<typeof fetch>[0]) => {
+        await Promise.resolve();
+
+        calls.push(input instanceof Request ? input.url : input.toString());
+
+        return Response.json({ plan_type: "pro" });
+      },
+      { preconnect: () => null }
+    );
 
     await Effect.runPromise(
       withClient((client) => client.fetchUsage(), {
@@ -176,6 +207,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "ChatGPT base URL path must be /backend-api or omitted"
@@ -191,6 +223,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "ChatGPT base URL path must be /backend-api or omitted"
@@ -211,6 +244,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Usage response had an invalid shape"
@@ -226,6 +260,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Reset credits response was not an object"
@@ -241,6 +276,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Reset credits response had an invalid shape"
@@ -256,6 +292,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Reset credits response had an invalid shape"
@@ -271,6 +308,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Reset credits response had an invalid shape"
@@ -286,6 +324,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Consume reset response was not an object"
@@ -301,6 +340,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Consume reset response had an invalid shape"
@@ -315,21 +355,30 @@ describe("createCodexClient", () => {
       "nothing_to_reset",
       "reset",
     ] as const;
+
     let nextCode = 0;
+
     // SAFETY: this test double implements the global fetch contract for every call.
     const fetchMock = Object.assign(
-      () => {
+      async () => {
+        await Promise.resolve();
+
         const code = codes[nextCode];
         nextCode += 1;
-        return Promise.resolve(Response.json({ code, windows_reset: 1 }));
+
+        return Response.json({ code, windows_reset: 1 });
       },
       { preconnect: () => null }
     );
+
     globalThis.fetch = fetchMock;
 
     const responses = await Promise.all(
-      codes.map(() =>
-        Effect.runPromise(withClient((client) => client.consumeResetCredit()))
+      codes.map(
+        async () =>
+          await Effect.runPromise(
+            withClient((client) => client.consumeResetCredit())
+          )
       )
     );
 
@@ -346,6 +395,7 @@ describe("createCodexClient", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Consume reset response had an invalid shape"
@@ -358,14 +408,14 @@ describe("createCodexClient", () => {
       withClient((client) =>
         client.consumeResetCredit(
           // SAFETY: this intentionally passes a legacy string to test runtime rejection.
-          "redeem-request-id" as Parameters<
-            CodexClient["consumeResetCredit"]
-          >[0]
+          // @ts-expect-error Intentional invalid input verifies runtime rejection.
+          "redeem-request-id"
         )
       )
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain("expects an options object");
     }
@@ -374,21 +424,28 @@ describe("createCodexClient", () => {
   test("treats null options as defaults", async () => {
     const bodies: unknown[] = [];
     // SAFETY: this test double implements the global fetch contract for every call.
-    globalThis.fetch = ((
-      _input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1]
-    ) => {
-      bodies.push(init?.body);
-      return Promise.resolve(
-        Response.json({ code: "reset", windows_reset: 1 })
-      );
-    }) as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1]
+      ) => {
+        await Promise.resolve();
+
+        bodies.push(init?.body);
+
+        return Response.json({ code: "reset", windows_reset: 1 });
+      },
+      { preconnect: () => null }
+    );
 
     await Effect.runPromise(
       withClient((client) => client.consumeResetCredit(null))
     );
 
-    expect(JSON.parse(String(bodies[0]))).toEqual({
+    expect(
+      Schema.decodeUnknownSync(Schema.Json)(JSON.parse(String(bodies[0])))
+    ).toEqual({
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Bun asymmetric matchers return any.
       redeem_request_id: expect.any(String),
     });
   });
@@ -397,45 +454,55 @@ describe("createCodexClient", () => {
     const bodies: unknown[] = [];
     let attempt = 0;
     // SAFETY: this test double implements the global fetch contract for every call.
-    globalThis.fetch = ((
-      _input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1]
-    ) => {
-      bodies.push(init?.body);
-      attempt += 1;
-      if (attempt === 1) {
-        return Promise.reject(new DOMException("timeout", "TimeoutError"));
-      }
-      return Promise.resolve(
-        Response.json({ code: "reset", windows_reset: 1 })
-      );
-    }) as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1]
+      ) => {
+        await Promise.resolve();
+
+        bodies.push(init?.body);
+        attempt += 1;
+
+        if (attempt === 1) {
+          throw new DOMException("timeout", "TimeoutError");
+        }
+
+        return Response.json({ code: "reset", windows_reset: 1 });
+      },
+      { preconnect: () => null }
+    );
 
     await Effect.runPromise(
       withClient((client) => {
         const consume = client.consumeResetCredit();
+
         return consume.pipe(Effect.retry({ times: 1 }));
       })
     );
 
     expect(bodies).toHaveLength(2);
-    const first = JSON.parse(String(bodies[0]));
-    const second = JSON.parse(String(bodies[1]));
-    expect(first.redeem_request_id).toBe(second.redeem_request_id);
+    const first: unknown = JSON.parse(String(bodies[0]));
+    const second: unknown = JSON.parse(String(bodies[1]));
+    expect(first).toEqual(second);
   });
 
   test("sends creditId when provided via options object", async () => {
     const bodies: unknown[] = [];
     // SAFETY: this test double implements the global fetch contract for every call.
-    globalThis.fetch = ((
-      _input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1]
-    ) => {
-      bodies.push(init?.body);
-      return Promise.resolve(
-        Response.json({ code: "reset", windows_reset: 1 })
-      );
-    }) as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1]
+      ) => {
+        await Promise.resolve();
+
+        bodies.push(init?.body);
+
+        return Response.json({ code: "reset", windows_reset: 1 });
+      },
+      { preconnect: () => null }
+    );
 
     await Effect.runPromise(
       withClient((client) =>
@@ -446,7 +513,9 @@ describe("createCodexClient", () => {
       )
     );
 
-    expect(JSON.parse(String(bodies[0]))).toEqual({
+    expect(
+      Schema.decodeUnknownSync(Schema.Json)(JSON.parse(String(bodies[0])))
+    ).toEqual({
       credit_id: "RateLimitResetCredit_test",
       redeem_request_id: "redeem-request-id",
     });

@@ -135,11 +135,19 @@ interface JsonObject {
 const isObject = (value: JsonValue): value is JsonObject =>
   value !== null && !Array.isArray(value);
 
-/** Builds a tagged parse error for the rejected API payload. */
+/** Builds a tagged parse error for the rejected API payload.
+ * @param message - message.
+ * @param value - value.
+ * @returns Builds a tagged parse error for the rejected API payload.
+ */
 const parseError = (message: string, value: JsonValue): CodexParseError =>
   new CodexParseError({ message, value });
 
-/** Maps a schema decode failure into a `CodexParseError`. */
+/** Maps a schema decode failure into a `CodexParseError`.
+ * @param invalidPayloadMessage - invalid Payload Message.
+ * @param value - value.
+ * @returns Maps a schema decode failure into a `CodexParseError`.
+ */
 const invalidPayloadError = (
   invalidPayloadMessage: string,
   value: JsonObject
@@ -148,19 +156,24 @@ const invalidPayloadError = (
 /**
  * Decodes an API payload with `schema`, preserving Effect parse diagnostics on
  * shape mismatches while keeping dedicated messages for non-object inputs.
+ * @param params - params.
+ * @returns Decodes an API payload with `schema`, preserving Effect parse diagnostics on
+shape mismatches while keeping dedicated messages for non-object inputs.
  */
 const parseSchema = <A>(params: {
   readonly input: JsonValue;
   readonly invalidPayloadMessage: string;
   readonly notObjectMessage: string;
-  readonly schema: Schema.ConstraintDecoder<A, never>;
+  readonly schema: Schema.ConstraintDecoder<A>;
 }): Effect.Effect<A, CodexParseError> => {
   const { input } = params;
+
   if (!isObject(input)) {
     return Effect.fail(parseError(params.notObjectMessage, input));
   }
 
   const decoded = Schema.decodeUnknownExit(params.schema)(input);
+
   if (Exit.isFailure(decoded)) {
     return Effect.fail(
       invalidPayloadError(params.invalidPayloadMessage, input)
@@ -174,6 +187,7 @@ const parseSchema = <A>(params: {
  * Parses a Codex usage API payload into a typed structure.
  *
  * @param input - Raw JSON value from the usage endpoint.
+ * @returns Parses a Codex usage API payload into a typed structure.
  */
 export const parseUsagePayload = (
   input: JsonValue
@@ -189,6 +203,7 @@ export const parseUsagePayload = (
  * Parses a rate-limit reset credits API payload into a typed structure.
  *
  * @param input - Raw JSON value from the reset-credits endpoint.
+ * @returns Parses a rate-limit reset credits API payload into a typed structure.
  */
 export const parseResetCreditsPayload = (
   input: JsonValue
@@ -204,6 +219,7 @@ export const parseResetCreditsPayload = (
  * Parses a consume-reset API response into a typed structure.
  *
  * @param input - Raw JSON value from the consume-reset endpoint.
+ * @returns Parses a consume-reset API response into a typed structure.
  */
 export const parseConsumeResetResponse = (
   input: JsonValue
