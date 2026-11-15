@@ -23,7 +23,6 @@ const withClient = <A, E>(
   createCodexClient(tokens, options).pipe(Effect.flatMap(run));
 
 const mockResponse = (body: JsonValue | readonly JsonValue[]): void => {
-  // SAFETY: this test double implements the global fetch contract for every call.
   const fetchMock = Object.assign(
     async () => {
       await Promise.resolve();
@@ -90,7 +89,6 @@ describe("createCodexClient", () => {
   test("allows HTTP loopback base URLs", async () => {
     const calls: string[] = [];
 
-    // SAFETY: this test double implements the global fetch contract for every call.
     const fetchMock = Object.assign(
       async (input: Parameters<typeof fetch>[0]) => {
         await Promise.resolve();
@@ -157,7 +155,7 @@ describe("createCodexClient", () => {
 
   test("only appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
-    // SAFETY: this test double implements the global fetch contract for every call.
+
     globalThis.fetch = Object.assign(
       async (input: Parameters<typeof fetch>[0]) => {
         await Promise.resolve();
@@ -180,7 +178,7 @@ describe("createCodexClient", () => {
 
   test("appends backend-api for exact ChatGPT hostnames", async () => {
     const calls: string[] = [];
-    // SAFETY: this test double implements the global fetch contract for every call.
+
     globalThis.fetch = Object.assign(
       async (input: Parameters<typeof fetch>[0]) => {
         await Promise.resolve();
@@ -358,7 +356,6 @@ describe("createCodexClient", () => {
 
     let nextCode = 0;
 
-    // SAFETY: this test double implements the global fetch contract for every call.
     const fetchMock = Object.assign(
       async () => {
         await Promise.resolve();
@@ -404,26 +401,38 @@ describe("createCodexClient", () => {
   });
 
   test("rejects legacy positional string arguments", async () => {
-    const exit = await Effect.runPromiseExit(
-      withClient((client) =>
-        client.consumeResetCredit(
-          // SAFETY: this intentionally passes a legacy string to test runtime rejection.
-          // @ts-expect-error Intentional invalid input verifies runtime rejection.
-          "redeem-request-id"
-        )
-      )
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--eval",
+        `
+        import { Effect, Redacted } from "effect";
+        import { createCodexClient } from "./src/codex/client.ts";
+        const client = await Effect.runPromise(createCodexClient({
+          accessToken: Redacted.make("test-access-token"), accountId: "test-account-id",
+        }));
+        const exit = await Effect.runPromiseExit(client.consumeResetCredit("redeem-request-id"));
+        if (exit._tag !== "Failure") process.exit(1);
+        process.stdout.write(exit.cause.toString());
+      `,
+      ],
+      { stdout: "pipe", stderr: "pipe" }
     );
 
-    expect(exit._tag).toBe("Failure");
+    const [exitCode, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
 
-    if (exit._tag === "Failure") {
-      expect(exit.cause.toString()).toContain("expects an options object");
-    }
+    expect(errors).toBe("");
+    expect(exitCode).toBe(0);
+    expect(output).toContain("expects an options object");
   });
 
   test("treats null options as defaults", async () => {
     const bodies: unknown[] = [];
-    // SAFETY: this test double implements the global fetch contract for every call.
+
     globalThis.fetch = Object.assign(
       async (
         _input: Parameters<typeof fetch>[0],
@@ -442,18 +451,21 @@ describe("createCodexClient", () => {
       withClient((client) => client.consumeResetCredit(null))
     );
 
-    expect(
-      Schema.decodeUnknownSync(Schema.Json)(JSON.parse(String(bodies[0])))
-    ).toEqual({
-      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Bun asymmetric matchers return any.
-      redeem_request_id: expect.any(String),
-    });
+    const parsedBody = Schema.decodeUnknownSync(
+      Schema.Struct({
+        redeem_request_id: Schema.String,
+        credit_id: Schema.optionalKey(Schema.String),
+      })
+    )(JSON.parse(String(bodies[0])));
+
+    expect(parsedBody.redeem_request_id).not.toBeEmpty();
+    expect(parsedBody.credit_id).toBeUndefined();
   });
 
   test("reuses redeem_request_id when the consume effect is retried", async () => {
     const bodies: unknown[] = [];
     let attempt = 0;
-    // SAFETY: this test double implements the global fetch contract for every call.
+
     globalThis.fetch = Object.assign(
       async (
         _input: Parameters<typeof fetch>[0],
@@ -489,7 +501,7 @@ describe("createCodexClient", () => {
 
   test("sends creditId when provided via options object", async () => {
     const bodies: unknown[] = [];
-    // SAFETY: this test double implements the global fetch contract for every call.
+
     globalThis.fetch = Object.assign(
       async (
         _input: Parameters<typeof fetch>[0],

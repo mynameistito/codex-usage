@@ -19,11 +19,11 @@ import { Schema } from "effect";
 
 /** Subset of `package.json` fields read by this script. */
 interface PackageJson {
-  dependencies?: Record<string, string> | undefined;
-  devDependencies?: Record<string, string> | undefined;
-  name?: string | undefined;
-  optionalDependencies?: Record<string, string> | undefined;
-  peerDependencies?: Record<string, string> | undefined;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  name?: string;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
 }
 
 /** Supported Changesets semver bump types. */
@@ -78,17 +78,17 @@ const readPackageJson = (packageJsonPath: string) => {
   try {
     return Schema.decodeUnknownSync(
       Schema.Struct({
-        name: Schema.optional(Schema.String),
-        dependencies: Schema.optional(
+        name: Schema.optionalKey(Schema.String),
+        dependencies: Schema.optionalKey(
           Schema.Record(Schema.String, Schema.String)
         ),
-        devDependencies: Schema.optional(
+        devDependencies: Schema.optionalKey(
           Schema.Record(Schema.String, Schema.String)
         ),
-        optionalDependencies: Schema.optional(
+        optionalDependencies: Schema.optionalKey(
           Schema.Record(Schema.String, Schema.String)
         ),
-        peerDependencies: Schema.optional(
+        peerDependencies: Schema.optionalKey(
           Schema.Record(Schema.String, Schema.String)
         ),
       })
@@ -196,7 +196,6 @@ const createChangesetFile = (changesetDir: string, content: string) => {
 
       return filename;
     } catch (error) {
-      // SAFETY: filesystem failures expose `code` through Node's documented error shape.
       if (
         !(error instanceof Error && "code" in error && error.code === "EEXIST")
       ) {
