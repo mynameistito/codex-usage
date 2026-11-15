@@ -459,6 +459,7 @@ describe("createCodexClient", () => {
     )(JSON.parse(String(bodies[0])));
 
     expect(parsedBody.redeem_request_id).not.toBeEmpty();
+    expect(parsedBody.credit_id).toBeUndefined();
   });
 
   test("reuses redeem_request_id when the consume effect is retried", async () => {
