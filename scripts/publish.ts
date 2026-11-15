@@ -40,6 +40,9 @@ export class ReleaseError extends Error {
   /** Stable discriminant for release errors. */
   readonly _tag = "ReleaseError" as const;
 
+  /** Creates a release error.
+   * @param message - Failure description.
+   */
   constructor(message: string) {
     super(message);
     this.name = "ReleaseError";
@@ -50,7 +53,10 @@ const PACKAGE_JSON_PATH = "package.json";
 const CHANGELOG_PATH = "CHANGELOG.md";
 const PUBLISHED_VERSION_CONFLICT = "Cannot stage previously published version";
 
-/** Parses the release subcommand passed to `node --run release`. */
+/** Parses the release subcommand passed to `node --run release`.
+ * @param command - command.
+ * @returns Parses the release subcommand passed to `node --run release`.
+ */
 export const parseReleaseCommand = (
   command: string | undefined
 ): ReleaseCommand => {
@@ -61,14 +67,20 @@ export const parseReleaseCommand = (
   throw new ReleaseError("Usage: node --run release -- <npm | github>");
 };
 
-/** Reads and parses package metadata needed by release operations. */
+/** Reads and parses package metadata needed by release operations.
+ * @param packageJsonPath - package Json Path.
+ * @returns Reads and parses package metadata needed by release operations.
+ */
 export const readReleasePackage = (
   packageJsonPath = PACKAGE_JSON_PATH
 ): ReleasePackage => {
   // SAFETY: package.json is validated by the field checks below before use.
   const parsed: unknown = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
-  if (!parsed || Array.isArray(parsed)) {
+  if (
+    !Schema.is(Schema.Record(Schema.String, Schema.Unknown))(parsed) ||
+    Array.isArray(parsed)
+  ) {
     throw new ReleaseError("package.json must contain an object");
   }
 
@@ -77,6 +89,7 @@ export const readReleasePackage = (
     readonly name?: unknown;
     readonly version?: unknown;
   };
+
   const { name, version } = packageJson;
 
   if (!Schema.is(Schema.String)(name) || !name.trim()) {
@@ -92,11 +105,17 @@ export const readReleasePackage = (
   return { name, version };
 };
 
-/** Returns the npm package spec for a release package. */
+/** Returns the npm package spec for a release package.
+ * @param releasePackage - release Package.
+ * @returns the npm package spec for a release package.
+ */
 export const packageSpec = (releasePackage: ReleasePackage) =>
   `${releasePackage.name}@${releasePackage.version}`;
 
-/** Returns GitHub Actions outputs shared by release subcommands. */
+/** Returns GitHub Actions outputs shared by release subcommands.
+ * @param releasePackage - release Package.
+ * @returns GitHub Actions outputs shared by release subcommands.
+ */
 export const createBaseOutputs = (
   releasePackage: ReleasePackage
 ): ReleaseOutputs => ({
@@ -105,14 +124,18 @@ export const createBaseOutputs = (
   version: releasePackage.version,
 });
 
-/** Writes release outputs to GitHub Actions when `GITHUB_OUTPUT` is present. */
+/** Writes release outputs to GitHub Actions when `GITHUB_OUTPUT` is present.
+ * @returns Writes release outputs to GitHub Actions when `GITHUB_OUTPUT` is present.
+ * @param outputs - Input for this operation.
+ */
 export const writeGithubOutputs = (outputs: ReleaseOutputs) => {
   const outputPath = process.env["GITHUB_OUTPUT"];
+
   const lines = Object.entries(outputs).map(
     ([key, value]) => `${key}=${value}`
   );
 
-  if (outputPath) {
+  if (outputPath !== undefined && outputPath !== "") {
     appendFileSync(outputPath, `${lines.join("\n")}\n`);
   }
 
@@ -121,12 +144,17 @@ export const writeGithubOutputs = (outputs: ReleaseOutputs) => {
   }
 };
 
-/** Runs an external command without invoking a shell. */
+/** Runs an external command without invoking a shell.
+ * @param command - command.
+ * @param args - args.
+ * @returns Runs an external command without invoking a shell.
+ */
 export const runCommand: CommandRunner = async (command, args) => {
   const processResult = Bun.spawn([command, ...args], {
     stderr: "pipe",
     stdout: "pipe",
   });
+
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(processResult.stdout).text(),
     new Response(processResult.stderr).text(),
@@ -136,7 +164,11 @@ export const runCommand: CommandRunner = async (command, args) => {
   return { exitCode, stderr, stdout };
 };
 
-/** Stages the package with npm or reports that it is already released. */
+/** Stages the package with npm or reports that it is already released.
+ * @param runner - runner.
+ * @param releasePackage - release Package.
+ * @returns Stages the package with npm or reports that it is already released.
+ */
 export const runNpmRelease = async (
   runner: CommandRunner = runCommand,
   releasePackage = readReleasePackage()
@@ -148,10 +180,12 @@ export const runNpmRelease = async (
   if (published.exitCode === 0) {
     console.log(`${spec} is already published`);
     writeGithubOutputs({ ...baseOutputs, published: "true" });
+
     return;
   }
 
   const publishedOutput = `${published.stdout}${published.stderr}`;
+
   if (!/E404|404 Not Found|is not in this registry/iu.test(publishedOutput)) {
     throw new ReleaseError(
       `npm view failed with ${published.exitCode}: ${publishedOutput.trim()}`
@@ -167,6 +201,7 @@ export const runNpmRelease = async (
     if (publishOutput.includes(PUBLISHED_VERSION_CONFLICT)) {
       console.log(`${spec} is already published or staged`);
       writeGithubOutputs({ ...baseOutputs, published: "true" });
+
       return;
     }
 
@@ -178,17 +213,23 @@ export const runNpmRelease = async (
   writeGithubOutputs({ ...baseOutputs, staged: "true" });
 };
 
-/** Extracts release notes for `version` from a Changesets changelog. */
+/** Extracts release notes for `version` from a Changesets changelog.
+ * @param changelog - changelog.
+ * @param version - version.
+ * @returns Extracts release notes for `version` from a Changesets changelog.
+ */
 export const extractReleaseNotes = (changelog: string, version: string) => {
   const escapedVersion = version.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const heading = new RegExp(`^## ${escapedVersion}[ \\t]*$`, "mu");
   const match = heading.exec(changelog);
   const newlineStart = match ? match.index + match[0].length : -1;
   let bodyStart = -1;
+
   if (newlineStart !== -1) {
     const newlineLength = changelog.startsWith("\r\n", newlineStart) ? 2 : 1;
     bodyStart = newlineStart + newlineLength;
   }
+
   const nextHeading =
     bodyStart === -1 ? -1 : changelog.indexOf("\n## ", bodyStart);
 
@@ -201,7 +242,12 @@ export const extractReleaseNotes = (changelog: string, version: string) => {
     .trim();
 };
 
-/** Creates a GitHub release unless the tag already exists. */
+/** Creates a GitHub release unless the tag already exists.
+ * @param runner - runner.
+ * @param releasePackage - release Package.
+ * @param changelog - changelog.
+ * @returns Creates a GitHub release unless the tag already exists.
+ */
 export const runGitHubRelease = async (
   runner: CommandRunner = runCommand,
   releasePackage = readReleasePackage(),
@@ -212,12 +258,13 @@ export const runGitHubRelease = async (
 
   if (existingRelease.exitCode === 0) {
     console.log(`GitHub release ${tag} already exists`);
+
     return;
   }
 
   const target = process.env["GITHUB_SHA"];
 
-  if (!target) {
+  if (target === undefined || target === null || target === "") {
     throw new ReleaseError("GITHUB_SHA is required to create a GitHub release");
   }
 
@@ -243,12 +290,16 @@ export const runGitHubRelease = async (
   }
 };
 
-/** Dispatches a release subcommand. */
+/** Dispatches a release subcommand.
+ * @param args - args.
+ * @returns Dispatches a release subcommand.
+ */
 export const runRelease = async (args: readonly string[]) => {
   const command = parseReleaseCommand(args[0]);
 
   if (command === "npm") {
     await runNpmRelease();
+
     return;
   }
 
@@ -261,6 +312,7 @@ if (import.meta.main) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown release error";
+
     console.error(message);
     process.exit(1);
   }

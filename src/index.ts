@@ -5,8 +5,11 @@
  * and tagged errors used by the CLI and downstream consumers.
  */
 export { parseAuthTokens, readCodexAuth } from "@/codex/auth.js";
+
 export { createCodexClient } from "@/codex/client.js";
+
 export type { CodexClient, ConsumeResetCreditOptions } from "@/codex/client.js";
+
 export {
   CliError,
   CodexAuthError,
@@ -14,16 +17,20 @@ export {
   CodexHttpError,
   CodexParseError,
 } from "@/errors/index.js";
+
 export type { CodexUsageError } from "@/errors/index.js";
+
 export {
   formatConsumeResetResponse,
   formatResetCredits,
   formatUsage,
 } from "@/usage/format.js";
+
 export {
   limitLabelForWindow,
   normalizeUsagePayload,
 } from "@/usage/normalize.js";
+
 export type {
   AdditionalRateLimitDetails,
   CodexAuthTokens,

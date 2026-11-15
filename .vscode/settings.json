@@ -55,5 +55,10 @@
   },
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit"
+  },
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "[astro]": {
+    "editor.defaultFormatter": "astro-build.astro-vscode"
   }
 }

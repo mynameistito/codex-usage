@@ -103,6 +103,7 @@ describe("formatResetCredits", () => {
       expect(formatResetCredits(payload)).not.toContain("expires today");
     } finally {
       setSystemTime();
+
       if (previousTz === undefined) {
         delete process.env.TZ;
       } else {

@@ -7,7 +7,9 @@ import { Effect, Redacted, Schema } from "effect";
 import type { CodexAuthTokens, JsonValue } from "@/codex/types.js";
 import { CodexAuthError } from "@/errors/index.js";
 
-/** Returns the default Codex auth file path under the user home directory. */
+/** Returns the default Codex auth file path under the user home directory.
+ * @returns the default Codex auth file path under the user home directory.
+ */
 const defaultCodexAuthPath = (): string =>
   path.join(homedir(), ".codex", "auth.json");
 
@@ -15,7 +17,10 @@ interface JsonObject {
   readonly [key: string]: JsonValue;
 }
 
-/** Returns whether `value` is a plain object record. */
+/** Returns whether `value` is a plain object record.
+ * @param value - value.
+ * @returns whether `value` is a plain object record.
+ */
 const isRecord = (value: JsonValue): value is JsonObject =>
   value !== null &&
   !Array.isArray(value) &&
@@ -28,12 +33,14 @@ const isNonEmptyString = (value: JsonValue): value is string =>
  * Parses a decoded `auth.json` object into redacted Codex API credentials.
  *
  * @param value - Parsed JSON value from a Codex auth file.
+ * @returns Parses a decoded `auth.json` object into redacted Codex API credentials.
  */
 export const parseAuthTokens = (
   value: JsonValue
 ): Effect.Effect<CodexAuthTokens, CodexAuthError> =>
   Effect.gen(function* parseAuthTokensEffect() {
     const tokens = isRecord(value) ? (value["tokens"] ?? null) : null;
+
     if (!isRecord(tokens)) {
       return yield* new CodexAuthError({
         message: "Missing tokens object in .codex/auth.json",
@@ -62,6 +69,7 @@ export const parseAuthTokens = (
  * Reads and parses Codex credentials from `auth.json`.
  *
  * @param authPath - Path to the auth file. Defaults to `~/.codex/auth.json`.
+ * @returns Reads and parses Codex credentials from `auth.json`.
  */
 export const readCodexAuth = (
   authPath = defaultCodexAuthPath()
@@ -73,7 +81,7 @@ export const readCodexAuth = (
           cause,
           message: `Could not read Codex auth file at ${authPath}`,
         }),
-      try: () => readFile(authPath, "utf-8"),
+      try: async () => await readFile(authPath, "utf-8"),
     });
 
     const parsed = yield* Effect.try({
@@ -83,8 +91,9 @@ export const readCodexAuth = (
           message: `Could not parse Codex auth file at ${authPath}`,
         }),
       try: () => {
-        const parsedValue: JsonValue = JSON.parse(raw);
-        return parsedValue;
+        const parsedValue: unknown = JSON.parse(raw);
+
+        return Schema.decodeUnknownSync(Schema.Json)(parsedValue);
       },
     });
 

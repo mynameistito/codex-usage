@@ -4,14 +4,17 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { Cause, Effect } from "effect";
+import { Schema, Cause, Effect } from "effect";
 
 import { formatUnexpectedCliError, parseArgs, runCli } from "@/cli.js";
 import type { JsonValue } from "@/codex/types.js";
 
 const requirePackageJson = createRequire(import.meta.url);
+
 const packageJson: { readonly name: string; readonly version: string } =
-  requirePackageJson("../package.json");
+  Schema.decodeUnknownSync(
+    Schema.Struct({ name: Schema.String, version: Schema.String })
+  )(requirePackageJson("../package.json"));
 
 const testBaseUrl = "https://example.test/backend-api";
 const originalFetch = globalThis.fetch;
@@ -44,22 +47,33 @@ const createAuthFile = async (): Promise<string> => {
 
 const mockFetch = (body: JsonValue | readonly JsonValue[]): FetchCall[] => {
   const calls: FetchCall[] = [];
-  const bodies = Array.isArray(body) ? [...body] : [body];
-  // SAFETY: this test double implements the global fetch contract for every call.
-  globalThis.fetch = ((
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1]
-  ) => {
-    const request = input instanceof Request ? input : null;
-    calls.push({
-      body: init?.body,
-      headers: new Headers(init?.headers ?? request?.headers),
-      method: init?.method ?? request?.method ?? "GET",
-      url: request?.url ?? String(input),
-    });
 
-    return Promise.resolve(Response.json(bodies.shift() ?? body));
-  }) as typeof fetch;
+  const bodies: JsonValue[] = Schema.is(Schema.Array(Schema.Json))(body)
+    ? [...Schema.decodeUnknownSync(Schema.Array(Schema.Json))(body)]
+    : [body];
+
+  // SAFETY: this test double implements the global fetch contract for every call.
+  globalThis.fetch = Object.assign(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      await Promise.resolve();
+
+      const request = input instanceof Request ? input : null;
+      calls.push({
+        body: init?.body,
+        headers: new Headers(init?.headers ?? request?.headers),
+        method: init?.method ?? request?.method ?? "GET",
+        url:
+          request?.url ??
+          (input instanceof Request ? input.url : input.toString()),
+      });
+
+      return Response.json(bodies.shift() ?? body);
+    },
+    { preconnect: () => null }
+  );
 
   return calls;
 };
@@ -68,9 +82,9 @@ afterEach(async () => {
   globalThis.fetch = originalFetch;
 
   await Promise.all(
-    tempDirs
-      .splice(0)
-      .map((directory) => rm(directory, { force: true, recursive: true }))
+    tempDirs.splice(0).map(async (directory) => {
+      await rm(directory, { force: true, recursive: true });
+    })
   );
 });
 
@@ -91,6 +105,7 @@ describe("parseArgs", () => {
     const exit = await Effect.runPromiseExit(runCli(["reset"]));
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain("without --confirm");
     }
@@ -114,6 +129,7 @@ describe("parseArgs", () => {
 
   test("dispatches status json with fake auth and mocked fetch", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch({
       plan_type: "pro",
       rate_limit: {
@@ -139,7 +155,14 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed: { readonly planType?: string } = JSON.parse(output);
+
+    const parsed = Schema.decodeUnknownSync(
+      Schema.Struct({
+        planType: Schema.optional(Schema.String),
+        available_count: Schema.optional(Schema.Number),
+        code: Schema.optional(Schema.String),
+      })
+    )(JSON.parse(output));
 
     expect(parsed.planType).toBe("pro");
     expect(calls).toHaveLength(1);
@@ -164,7 +187,14 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed: { readonly available_count?: number } = JSON.parse(output);
+
+    const parsed = Schema.decodeUnknownSync(
+      Schema.Struct({
+        planType: Schema.optional(Schema.String),
+        available_count: Schema.optional(Schema.Number),
+        code: Schema.optional(Schema.String),
+      })
+    )(JSON.parse(output));
 
     expect(parsed.available_count).toBe(3);
     expect(calls).toHaveLength(1);
@@ -174,6 +204,7 @@ describe("parseArgs", () => {
 
   test("dispatches confirmed reset json with the soonest-expiring credit", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch([
       {
         available_count: 3,
@@ -209,7 +240,14 @@ describe("parseArgs", () => {
         testBaseUrl,
       ])
     );
-    const parsed: { readonly code?: string } = JSON.parse(output);
+
+    const parsed = Schema.decodeUnknownSync(
+      Schema.Struct({
+        planType: Schema.optional(Schema.String),
+        available_count: Schema.optional(Schema.Number),
+        code: Schema.optional(Schema.String),
+      })
+    )(JSON.parse(output));
 
     expect(parsed.code).toBe("reset");
     expect(calls).toHaveLength(2);
@@ -219,14 +257,18 @@ describe("parseArgs", () => {
     expect(calls[1]?.url).toBe(
       `${testBaseUrl}/wham/rate-limit-reset-credits/consume`
     );
-    expect(JSON.parse(String(calls[1]?.body))).toEqual({
+    expect(
+      Schema.decodeUnknownSync(Schema.Json)(JSON.parse(String(calls[1]?.body)))
+    ).toEqual({
       credit_id: "RateLimitResetCredit_soonest",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Bun asymmetric matchers return any.
       redeem_request_id: expect.any(String),
     });
   });
 
   test("refuses confirmed reset when no credits are available", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch({
       available_count: 0,
       credits: [
@@ -251,6 +293,7 @@ describe("parseArgs", () => {
 
     expect(exit._tag).toBe("Failure");
     expect(calls).toHaveLength(1);
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain("No available reset credits");
     }
@@ -258,6 +301,7 @@ describe("parseArgs", () => {
 
   test("refuses confirmed reset when available credits have invalid expiry dates", async () => {
     const authPath = await createAuthFile();
+
     const calls = mockFetch({
       available_count: 1,
       credits: [
@@ -282,6 +326,7 @@ describe("parseArgs", () => {
 
     expect(exit._tag).toBe("Failure");
     expect(calls).toHaveLength(1);
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain("No available reset credits");
     }
@@ -303,6 +348,7 @@ describe("parseArgs", () => {
 
     expect(exit._tag).toBe("Failure");
     expect(calls).toHaveLength(0);
+
     if (exit._tag === "Failure") {
       expect(exit.cause.toString()).toContain(
         "Base URL must use HTTPS unless it is localhost"
@@ -312,6 +358,7 @@ describe("parseArgs", () => {
 
   test("exits with usage code for invalid CLI base URLs", async () => {
     const authPath = await createAuthFile();
+
     const child = Bun.spawn(
       [
         process.execPath,

@@ -19,6 +19,7 @@ describe("parseResetCreditsPayload", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+
     if (exit._tag === "Failure") {
       const message = exit.cause.toString();
       expect(message).toContain("Reset credits response had an invalid shape");

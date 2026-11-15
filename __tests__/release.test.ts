@@ -24,14 +24,17 @@ describe("release helpers", () => {
     );
   });
 
-  test("does not stage after an npm view error", async () => {
+  test("does not stage after an npm view error", () => {
     const calls: string[][] = [];
 
-    await expect(
+    expect(
       runNpmRelease(
-        (command, args) => {
+        async (command, args) => {
+          await Promise.resolve();
+
           calls.push([command, ...args]);
-          return Promise.resolve(result(1, "", "npm error code E401"));
+
+          return result(1, "", "npm error code E401");
         },
         { name: "example", version: "1.0.0" }
       )
@@ -42,17 +45,19 @@ describe("release helpers", () => {
 
   test("stages directly with trusted publishing", async () => {
     const calls: string[][] = [];
+
     const responses = [
       result(1, "", "npm error code E404"),
       result(0, "staged"),
     ];
 
     await runNpmRelease(
-      (command, args) => {
+      async (command, args) => {
+        await Promise.resolve();
+
         calls.push([command, ...args]);
-        return Promise.resolve(
-          responses.shift() ?? result(1, "", "unexpected call")
-        );
+
+        return responses.shift() ?? result(1, "", "unexpected call");
       },
       { name: "example", version: "1.0.0" }
     );
