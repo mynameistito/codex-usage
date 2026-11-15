@@ -74,7 +74,6 @@ export const parseReleaseCommand = (
 export const readReleasePackage = (
   packageJsonPath = PACKAGE_JSON_PATH
 ): ReleasePackage => {
-  // SAFETY: package.json is validated by the field checks below before use.
   const parsed: unknown = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 
   if (
@@ -84,13 +83,12 @@ export const readReleasePackage = (
     throw new ReleaseError("package.json must contain an object");
   }
 
-  // SAFETY: the preceding object check establishes the container invariant; fields are checked below.
-  const packageJson = parsed as {
-    readonly name?: unknown;
-    readonly version?: unknown;
-  };
-
-  const { name, version } = packageJson;
+  const { name, version } = Schema.decodeUnknownSync(
+    Schema.Struct({
+      name: Schema.optionalKey(Schema.Unknown),
+      version: Schema.optionalKey(Schema.Unknown),
+    })
+  )(parsed);
 
   if (!Schema.is(Schema.String)(name) || !name.trim()) {
     throw new ReleaseError("package.json must include a non-empty name field");

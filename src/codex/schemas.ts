@@ -12,7 +12,7 @@ import type {
 import { CodexParseError } from "@/errors/index.js";
 
 /** Schema for a single rate-limit window snapshot in usage responses. */
-const RateLimitWindowSnapshotSchema = Schema.Struct({
+export const RateLimitWindowSnapshotSchema = Schema.Struct({
   limit_window_seconds: Schema.Number,
   reset_after_seconds: Schema.Number,
   reset_at: Schema.Number,
@@ -20,7 +20,7 @@ const RateLimitWindowSnapshotSchema = Schema.Struct({
 });
 
 /** Schema for primary and secondary rate-limit details in usage responses. */
-const RateLimitStatusDetailsSchema = Schema.Struct({
+export const RateLimitStatusDetailsSchema = Schema.Struct({
   allowed: Schema.optional(Schema.Boolean),
   limit_reached: Schema.optional(Schema.Boolean),
   primary_window: Schema.optional(Schema.NullOr(RateLimitWindowSnapshotSchema)),
@@ -30,14 +30,14 @@ const RateLimitStatusDetailsSchema = Schema.Struct({
 });
 
 /** Schema for prepaid credit status details in usage responses. */
-const CreditStatusDetailsSchema = Schema.Struct({
+export const CreditStatusDetailsSchema = Schema.Struct({
   balance: Schema.optional(Schema.NullOr(Schema.String)),
   has_credits: Schema.optional(Schema.Boolean),
   unlimited: Schema.optional(Schema.Boolean),
 });
 
 /** Schema for individual spend-control limit details in usage responses. */
-const SpendControlLimitDetailsSchema = Schema.Struct({
+export const SpendControlLimitDetailsSchema = Schema.Struct({
   limit: Schema.optional(Schema.String),
   remaining: Schema.optional(Schema.String),
   remaining_percent: Schema.optional(Schema.Number),
@@ -48,7 +48,7 @@ const SpendControlLimitDetailsSchema = Schema.Struct({
 });
 
 /** Schema for spend-control status details in usage responses. */
-const SpendControlStatusDetailsSchema = Schema.Struct({
+export const SpendControlStatusDetailsSchema = Schema.Struct({
   individual_limit: Schema.optional(
     Schema.NullOr(SpendControlLimitDetailsSchema)
   ),
@@ -56,24 +56,24 @@ const SpendControlStatusDetailsSchema = Schema.Struct({
 });
 
 /** Schema for additional metered rate limits in usage responses. */
-const AdditionalRateLimitDetailsSchema = Schema.Struct({
+export const AdditionalRateLimitDetailsSchema = Schema.Struct({
   limit_name: Schema.String,
   metered_feature: Schema.String,
   rate_limit: Schema.optional(Schema.NullOr(RateLimitStatusDetailsSchema)),
 });
 
 /** Schema for rate-limit reached classification in usage responses. */
-const RateLimitReachedTypeSchema = Schema.Struct({
+export const RateLimitReachedTypeSchema = Schema.Struct({
   type: Schema.String,
 });
 
 /** Schema for reset-credit availability summary in usage responses. */
-const RateLimitResetCreditsSummarySchema = Schema.Struct({
+export const RateLimitResetCreditsSummarySchema = Schema.Struct({
   available_count: Schema.Number,
 });
 
 /** Schema for the Codex `/wham/usage` response payload. */
-const CodexUsagePayloadSchema = Schema.Struct({
+export const CodexUsagePayloadSchema = Schema.Struct({
   additional_rate_limits: Schema.optional(
     Schema.NullOr(Schema.Array(AdditionalRateLimitDetailsSchema))
   ),
@@ -99,7 +99,7 @@ const RateLimitResetCreditStatusSchema = Schema.Literals([
 ]);
 
 /** Schema for a single banked reset credit. */
-const RateLimitResetCreditSchema = Schema.Struct({
+export const RateLimitResetCreditSchema = Schema.Struct({
   description: Schema.optional(Schema.String),
   expires_at: Schema.optional(Schema.String),
   granted_at: Schema.optional(Schema.String),
@@ -111,7 +111,7 @@ const RateLimitResetCreditSchema = Schema.Struct({
 });
 
 /** Schema for the Codex reset-credits list response payload. */
-const RateLimitResetCreditsPayloadSchema = Schema.Struct({
+export const RateLimitResetCreditsPayloadSchema = Schema.Struct({
   available_count: Schema.optional(Schema.Number),
   credits: Schema.optional(Schema.Array(RateLimitResetCreditSchema)),
 });

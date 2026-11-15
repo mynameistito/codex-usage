@@ -52,7 +52,6 @@ const mockFetch = (body: JsonValue | readonly JsonValue[]): FetchCall[] => {
     ? [...Schema.decodeUnknownSync(Schema.Array(Schema.Json))(body)]
     : [body];
 
-  // SAFETY: this test double implements the global fetch contract for every call.
   globalThis.fetch = Object.assign(
     async (
       input: Parameters<typeof fetch>[0],
@@ -257,13 +256,16 @@ describe("parseArgs", () => {
     expect(calls[1]?.url).toBe(
       `${testBaseUrl}/wham/rate-limit-reset-credits/consume`
     );
-    expect(
-      Schema.decodeUnknownSync(Schema.Json)(JSON.parse(String(calls[1]?.body)))
-    ).toEqual({
-      credit_id: "RateLimitResetCredit_soonest",
-      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Bun asymmetric matchers return any.
-      redeem_request_id: expect.any(String),
-    });
+
+    const parsedBody = Schema.decodeUnknownSync(
+      Schema.Struct({
+        redeem_request_id: Schema.String,
+        credit_id: Schema.optionalKey(Schema.String),
+      })
+    )(JSON.parse(String(calls[1]?.body)));
+
+    expect(parsedBody.redeem_request_id).not.toBeEmpty();
+    expect(parsedBody.credit_id).toBe("RateLimitResetCredit_soonest");
   });
 
   test("refuses confirmed reset when no credits are available", async () => {
