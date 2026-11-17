@@ -1,5 +1,13 @@
 # @mynameistito/codex-usage
 
+## 2.0.1
+
+### Patch Changes
+
+- 21cb2a1: Update Effect and development dependencies, enforce the expanded Ultracite checks, and validate parsed JSON at file and API boundaries while preserving CLI behavior.
+- 7205505: Remove lint suppressions and redundant dependency exclusions, derive API types from their schemas, and align the package manager and CI workflows on Bun 1.4.4.
+- 7014279: Update dependencies and GitHub Actions to their latest releases.
+
 ## 2.0.0
 
 ### Major Changes
